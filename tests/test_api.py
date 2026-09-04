@@ -96,7 +96,7 @@ def test_aliases_are_unambiguous() -> None:
     seen: dict[str, str] = {}
     for key, aliases in api.FIELD_ALIASES.items():
         for alias in aliases:
-            normalised = api._normalise(alias)
+            normalised = api.normalise_name(alias)
             assert normalised not in seen, f"{alias} maps to {seen.get(normalised)}"
             seen[normalised] = key
 
@@ -119,7 +119,7 @@ def test_aliases_are_unambiguous() -> None:
 )
 def test_coerce_value(raw, expected) -> None:
     """Values arrive in several shapes and all become floats or None."""
-    assert api._coerce_value(raw) == expected
+    assert api.coerce_value(raw) == expected
 
 
 @pytest.mark.parametrize(

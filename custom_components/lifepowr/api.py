@@ -1,23 +1,45 @@
 """Client for the LIFEPOWR FlexiO local API.
 
-Endpoint and field names follow the on-device OpenAPI document
-(``FlexiO Device API``, firmware 1.148.3). The published web documentation
-disagrees with that spec on several points -- it lists ``/api/ems`` instead of
-``/api/ems/measurements``, ``PUT /api/ems/load_control`` instead of
-``POST /api/ems/generic-load``, and misspells a few fields -- so the client
-probes for the legacy layouts as a fallback and normalises whatever field
-spelling it finds onto a stable set of internal keys.
+The field mapping lives in :mod:`parsing`, which has no third-party
+dependencies; this module only adds the HTTP layer and endpoint selection.
 """
 
 from __future__ import annotations
 
 import asyncio
 from enum import StrEnum
-from typing import Any, Final
 
 from aiohttp import ClientError, ClientResponseError, ClientSession
 
 from .const import LOGGER, REQUEST_TIMEOUT
+from .parsing import (  # noqa: F401  (re-exported for entity platforms)
+    ALIAS_LOOKUP,
+    FIELD_ALIASES,
+    FIELD_NEW_MAX_PRICE,
+    KEY_BATTERY_CURRENT,
+    KEY_BATTERY_SOC,
+    KEY_BATTERY_SOH,
+    KEY_BATTERY_VOLTAGE,
+    KEY_ELECTRICITY_PRICE,
+    KEY_GENERIC_LOAD_MAX_PRICE,
+    KEY_GENERIC_LOAD_POWER,
+    KEY_GRID_POWER,
+    KEY_INVERTER_POWER,
+    KEY_LOAD_POWER,
+    KEY_POWER_SETPOINT,
+    KEY_PV_POWER,
+    KEY_TIMESTAMP,
+    PATH_CONVERTER,
+    PATH_GENERIC_LOAD,
+    PATH_LEGACY_EMS,
+    PATH_LEGACY_LOAD_CONTROL,
+    PATH_MEASUREMENTS,
+    PATH_VERSION,
+    coerce_value,
+    normalise_name,
+    normalise_timestamp,
+    parse_payload,
+)
 
 
 class FlexioError(Exception):
@@ -45,131 +67,6 @@ class Layout(StrEnum):
     LEGACY_EMS = "legacy_ems"
     #: One endpoint per measurement, e.g. /api/stateOfChargeFiltered.
     PER_FIELD = "per_field"
-
-
-# Internal, stable keys. Entities reference these, never the raw field names.
-KEY_BATTERY_CURRENT: Final = "battery_current"
-KEY_BATTERY_VOLTAGE: Final = "battery_voltage"
-KEY_INVERTER_POWER: Final = "inverter_power"
-KEY_LOAD_POWER: Final = "load_power"
-KEY_GRID_POWER: Final = "grid_power"
-KEY_PV_POWER: Final = "pv_power"
-KEY_BATTERY_SOC: Final = "battery_soc"
-KEY_BATTERY_SOH: Final = "battery_soh"
-KEY_POWER_SETPOINT: Final = "power_setpoint"
-KEY_ELECTRICITY_PRICE: Final = "electricity_price"
-KEY_GENERIC_LOAD_POWER: Final = "generic_load_power"
-KEY_GENERIC_LOAD_MAX_PRICE: Final = "generic_load_max_price"
-KEY_TIMESTAMP: Final = "timestamp"
-
-#: Raw field names per internal key. Matching is done on a normalised
-#: (lowercase, alphanumeric-only) form, so casing and separators do not matter
-#: and only genuinely different spellings need to be listed.
-FIELD_ALIASES: Final[dict[str, tuple[str, ...]]] = {
-    KEY_BATTERY_CURRENT: ("batteryCurrentInvFiltered",),
-    KEY_BATTERY_VOLTAGE: ("batteryVoltageInvFiltered",),
-    KEY_INVERTER_POWER: ("TotalInvPowerFiltered",),
-    KEY_LOAD_POWER: ("LoadPowerFiltered",),
-    KEY_GRID_POWER: ("MeterPowerFiltered",),
-    KEY_PV_POWER: ("totalPVPowerFiltered", "totaalPVPowerFiltered"),
-    KEY_BATTERY_SOC: ("stateOfChargeFiltered",),
-    KEY_BATTERY_SOH: ("stateOfHealthFiltered",),
-    # Not present in the OpenAPI spec, but documented on the website; harmless
-    # to look for and picked up automatically if a firmware exposes it.
-    KEY_POWER_SETPOINT: ("powerSetpoint", "powetSetpoint"),
-    KEY_ELECTRICITY_PRICE: (
-        "consumptionElectricityPrice",
-        "consumptionElectrictyPrice",
-    ),
-    KEY_GENERIC_LOAD_POWER: ("powerSetpointGeneric",),
-    KEY_GENERIC_LOAD_MAX_PRICE: ("genericLoadMaximumElectricityPrice",),
-    KEY_TIMESTAMP: ("timestamp",),
-}
-
-PATH_VERSION: Final = "info/version"
-PATH_CONVERTER: Final = "info/converter"
-PATH_MEASUREMENTS: Final = "ems/measurements"
-PATH_GENERIC_LOAD: Final = "ems/generic-load"
-#: Layouts described by the public web docs, tried only as a fallback.
-PATH_LEGACY_EMS: Final = "ems"
-PATH_LEGACY_LOAD_CONTROL: Final = "ems/load_control"
-
-#: Body field the box expects when setting the generic load price cap.
-FIELD_NEW_MAX_PRICE: Final = "newMaxPrice"
-
-#: Epoch values above this are milliseconds rather than seconds.
-_MS_THRESHOLD: Final = 1e11
-
-
-def _normalise(name: str) -> str:
-    """Reduce a field name to a comparable form."""
-    return "".join(char for char in name if char.isalnum()).lower()
-
-
-_ALIAS_LOOKUP: Final[dict[str, str]] = {
-    _normalise(alias): key
-    for key, aliases in FIELD_ALIASES.items()
-    for alias in aliases
-}
-
-
-def _coerce_value(raw: Any) -> float | None:
-    """Return a float from the many shapes the box may use for a value.
-
-    Accepts a bare number, a numeric string, or a mapping such as
-    ``{"value": 1.23, "unit": "kW"}``.
-    """
-    if isinstance(raw, bool):
-        return None
-    if isinstance(raw, (int, float)):
-        return float(raw)
-    if isinstance(raw, str):
-        try:
-            return float(raw.strip().replace(",", "."))
-        except ValueError:
-            return None
-    if isinstance(raw, dict):
-        for candidate in ("value", "val", "data", "result"):
-            if candidate in raw:
-                return _coerce_value(raw[candidate])
-    return None
-
-
-def normalise_timestamp(raw: float) -> float | None:
-    """Return a POSIX timestamp in seconds, or None when unusable.
-
-    The box reports an epoch whose unit is not stated in the spec; values that
-    are implausibly large are treated as milliseconds. A zero timestamp means
-    "never set" and is discarded.
-    """
-    if raw <= 0:
-        return None
-    return raw / 1000 if raw > _MS_THRESHOLD else raw
-
-
-def parse_payload(payload: Any) -> dict[str, float]:
-    """Map an arbitrary API document onto the internal keys.
-
-    Unknown fields are ignored; nested objects are walked a few levels deep so
-    a ``{"ems": {...}}`` style envelope is handled too.
-    """
-    result: dict[str, float] = {}
-
-    def _walk(node: Any, depth: int) -> None:
-        if depth > 3 or not isinstance(node, dict):
-            return
-        for raw_name, raw_value in node.items():
-            key = _ALIAS_LOOKUP.get(_normalise(str(raw_name)))
-            if key is not None:
-                value = _coerce_value(raw_value)
-                if value is not None:
-                    result[key] = value
-                continue
-            if isinstance(raw_value, dict):
-                _walk(raw_value, depth + 1)
-
-    _walk(payload, 0)
-    return result
 
 
 class FlexioClient:
@@ -205,8 +102,8 @@ class FlexioClient:
         return self.layout is Layout.MEASUREMENTS
 
     async def _request(
-        self, method: str, path: str, json: dict[str, Any] | None = None
-    ) -> Any:
+        self, method: str, path: str, json: dict[str, float] | None = None
+    ) -> object:
         """Perform a request and return the decoded body."""
         url = f"{self.base_url}/{path.lstrip('/')}"
         try:
@@ -217,20 +114,21 @@ class FlexioClient:
                 if response.status in (404, 500):
                     raise FlexioResponseError(f"{url} returned {response.status}")
                 response.raise_for_status()
-                # The box has been observed serving JSON as text/plain.
+                # The box has been observed serving JSON as text/plain, and
+                # serves HTML error pages via nginx/Express on failures.
                 return await response.json(content_type=None)
         except ClientResponseError as err:
             raise FlexioResponseError(f"{url} returned {err.status}") from err
         except (ClientError, TimeoutError) as err:
             raise FlexioConnectionError(f"Cannot reach {url}: {err}") from err
         except ValueError as err:
-            raise FlexioResponseError(f"{url} returned invalid JSON") from err
+            raise FlexioResponseError(f"{url} did not return JSON") from err
 
-    async def _get(self, path: str) -> Any:
+    async def _get(self, path: str) -> object:
         """Perform a GET and return the decoded body."""
         return await self._request("GET", path)
 
-    async def _try_get(self, path: str) -> Any | None:
+    async def _try_get(self, path: str) -> object | None:
         """GET a path, returning None instead of raising on a bad response."""
         try:
             return await self._get(path)
@@ -265,7 +163,7 @@ class FlexioClient:
             if key == KEY_TIMESTAMP:
                 continue
             for alias in aliases:
-                if _coerce_value(await self._try_get(alias)) is not None:
+                if coerce_value(await self._try_get(alias)) is not None:
                     discovered[key] = alias
                     break
 
@@ -330,7 +228,7 @@ class FlexioClient:
                 raise result
             if isinstance(result, BaseException):
                 continue
-            if (value := _coerce_value(result)) is not None:
+            if (value := coerce_value(result)) is not None:
                 data[key] = value
         if not data:
             raise FlexioResponseError("Box returned no known measurements")

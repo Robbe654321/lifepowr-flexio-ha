@@ -97,6 +97,24 @@ comments at the bottom of that file.
 > on a sunny moment; if your box is the other way round, swap the `max`/`min`
 > expressions in the template sensors.
 
+## Checking your box before installing
+
+`scripts/check_box.py` verifies the field mapping against a real FlexiObox
+without installing anything — standard library only, no Home Assistant:
+
+```console
+$ python3 scripts/check_box.py            # or: check_box.py 192.168.1.20
+```
+
+It reports which endpoints answer, which fields are recognised, warns about
+any field it does not know yet, and checks the three things the API
+documentation leaves open: the units of the battery voltage and current, the
+unit of the timestamp, and the sign convention of the grid and inverter power.
+It writes nothing unless you pass `--set-max-price 0.30`, which exercises the
+one write endpoint.
+
+If it flags an unmapped field, please open an issue with its name and value.
+
 ## Endpoints used
 
 | Endpoint | Purpose |
