@@ -1,0 +1,59 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to your FlexiObox",
+        "description": "Enter the hostname or IP address of your FlexiObox. It must be on the same network as Home Assistant.",
+        "data": {
+          "host": "Host"
+        },
+        "data_description": {
+          "host": "Usually {default_host}. Use the IP address instead if that name does not resolve."
+        }
+      },
+      "reconfigure": {
+        "title": "Update your FlexiObox connection",
+        "description": "Enter the new hostname or IP address of your FlexiObox.",
+        "data": {
+          "host": "Host"
+        },
+        "data_description": {
+          "host": "Usually {default_host}. Use the IP address instead if that name does not resolve."
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect. Check that the FlexiObox is powered on and reachable from Home Assistant.",
+      "invalid_response": "That host responded, but it does not look like a FlexiObox.",
+      "unknown": "Unexpected error"
+    },
+    "abort": {
+      "already_configured": "This FlexiObox is already configured",
+      "reconfigure_successful": "Reconfiguration was successful"
+    }
+  },
+  "entity": {
+    "sensor": {
+      "pv_power": { "name": "Solar production" },
+      "load_power": { "name": "Household consumption" },
+      "grid_power": { "name": "Grid power" },
+      "inverter_power": { "name": "Inverter power" },
+      "power_setpoint": { "name": "Inverter setpoint" },
+      "generic_load_power": { "name": "Generic load available power" },
+      "battery_soc": { "name": "Battery state of charge" },
+      "battery_soh": { "name": "Battery state of health" },
+      "battery_voltage": { "name": "Battery voltage" },
+      "battery_current": { "name": "Battery current" },
+      "electricity_price": { "name": "Electricity price" },
+      "generic_load_max_price": { "name": "Generic load maximum price" }
+    }
+  },
+  "exceptions": {
+    "cannot_connect": {
+      "message": "Cannot reach the FlexiObox at {host}"
+    },
+    "invalid_response": {
+      "message": "The FlexiObox returned an unexpected response"
+    }
+  }
+}

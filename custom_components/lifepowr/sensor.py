@@ -1,0 +1,144 @@
+"""Sensor platform for the LIFEPOWR FlexiO integration."""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from dataclasses import dataclass
+from typing import Any
+
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorEntity,
+    SensorEntityDescription,
+    SensorStateClass,
+)
+from homeassistant.const import (
+    PERCENTAGE,
+    UnitOfElectricCurrent,
+    UnitOfElectricPotential,
+    UnitOfPower,
+)
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+
+from . import api
+from .coordinator import FlexioConfigEntry
+from .entity import FlexioEntity
+
+PARALLEL_UPDATES = 0
+
+CURRENCY_PER_KWH = "€/kWh"
+
+
+@dataclass(frozen=True, kw_only=True)
+class FlexioSensorEntityDescription(SensorEntityDescription):
+    """Describe a FlexiO sensor."""
+
+    value_fn: Callable[[float], float] = lambda value: value
+
+
+POWER_SENSOR: dict[str, Any] = {
+    "device_class": SensorDeviceClass.POWER,
+    "state_class": SensorStateClass.MEASUREMENT,
+    "native_unit_of_measurement": UnitOfPower.KILO_WATT,
+    "suggested_display_precision": 2,
+}
+
+SENSORS: tuple[FlexioSensorEntityDescription, ...] = (
+    FlexioSensorEntityDescription(
+        key=api.KEY_PV_POWER, translation_key="pv_power", **POWER_SENSOR
+    ),
+    FlexioSensorEntityDescription(
+        key=api.KEY_LOAD_POWER, translation_key="load_power", **POWER_SENSOR
+    ),
+    FlexioSensorEntityDescription(
+        key=api.KEY_GRID_POWER, translation_key="grid_power", **POWER_SENSOR
+    ),
+    FlexioSensorEntityDescription(
+        key=api.KEY_INVERTER_POWER, translation_key="inverter_power", **POWER_SENSOR
+    ),
+    FlexioSensorEntityDescription(
+        key=api.KEY_POWER_SETPOINT,
+        translation_key="power_setpoint",
+        **POWER_SENSOR,
+    ),
+    FlexioSensorEntityDescription(
+        key=api.KEY_GENERIC_LOAD_POWER,
+        translation_key="generic_load_power",
+        **POWER_SENSOR,
+    ),
+    FlexioSensorEntityDescription(
+        key=api.KEY_BATTERY_SOC,
+        translation_key="battery_soc",
+        device_class=SensorDeviceClass.BATTERY,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=PERCENTAGE,
+        suggested_display_precision=0,
+    ),
+    FlexioSensorEntityDescription(
+        key=api.KEY_BATTERY_SOH,
+        translation_key="battery_soh",
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=PERCENTAGE,
+        suggested_display_precision=0,
+    ),
+    FlexioSensorEntityDescription(
+        key=api.KEY_BATTERY_VOLTAGE,
+        translation_key="battery_voltage",
+        device_class=SensorDeviceClass.VOLTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfElectricPotential.VOLT,
+        suggested_display_precision=1,
+        entity_registry_enabled_default=False,
+    ),
+    FlexioSensorEntityDescription(
+        key=api.KEY_BATTERY_CURRENT,
+        translation_key="battery_current",
+        device_class=SensorDeviceClass.CURRENT,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
+        suggested_display_precision=1,
+        entity_registry_enabled_default=False,
+    ),
+    FlexioSensorEntityDescription(
+        key=api.KEY_ELECTRICITY_PRICE,
+        translation_key="electricity_price",
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=CURRENCY_PER_KWH,
+        suggested_display_precision=4,
+    ),
+    FlexioSensorEntityDescription(
+        key=api.KEY_GENERIC_LOAD_MAX_PRICE,
+        translation_key="generic_load_max_price",
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=CURRENCY_PER_KWH,
+        suggested_display_precision=4,
+    ),
+)
+
+
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: FlexioConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
+) -> None:
+    """Set up the FlexiO sensors."""
+    coordinator = entry.runtime_data
+    async_add_entities(
+        FlexioSensor(coordinator, description)
+        for description in SENSORS
+        if description.key in coordinator.data
+    )
+
+
+class FlexioSensor(FlexioEntity, SensorEntity):
+    """A single measurement reported by the FlexiObox."""
+
+    entity_description: FlexioSensorEntityDescription
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the current measurement."""
+        if (value := self.coordinator.data.get(self.entity_description.key)) is None:
+            return None
+        return self.entity_description.value_fn(value)

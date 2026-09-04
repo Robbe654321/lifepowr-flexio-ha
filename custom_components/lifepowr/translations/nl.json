@@ -1,0 +1,59 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Verbinden met je FlexiObox",
+        "description": "Geef de hostnaam of het IP-adres van je FlexiObox op. Die moet in hetzelfde netwerk zitten als Home Assistant.",
+        "data": {
+          "host": "Host"
+        },
+        "data_description": {
+          "host": "Meestal {default_host}. Gebruik het IP-adres als die naam niet oplost."
+        }
+      },
+      "reconfigure": {
+        "title": "Verbinding met je FlexiObox aanpassen",
+        "description": "Geef de nieuwe hostnaam of het nieuwe IP-adres van je FlexiObox op.",
+        "data": {
+          "host": "Host"
+        },
+        "data_description": {
+          "host": "Meestal {default_host}. Gebruik het IP-adres als die naam niet oplost."
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Verbinden mislukt. Controleer of de FlexiObox aanstaat en bereikbaar is vanaf Home Assistant.",
+      "invalid_response": "Die host antwoordt, maar het lijkt geen FlexiObox te zijn.",
+      "unknown": "Onverwachte fout"
+    },
+    "abort": {
+      "already_configured": "Deze FlexiObox is al geconfigureerd",
+      "reconfigure_successful": "Herconfiguratie geslaagd"
+    }
+  },
+  "entity": {
+    "sensor": {
+      "pv_power": { "name": "Zonneproductie" },
+      "load_power": { "name": "Verbruik woning" },
+      "grid_power": { "name": "Netvermogen" },
+      "inverter_power": { "name": "Omvormervermogen" },
+      "power_setpoint": { "name": "Setpoint omvormer" },
+      "generic_load_power": { "name": "Beschikbaar vermogen generieke last" },
+      "battery_soc": { "name": "Laadtoestand batterij" },
+      "battery_soh": { "name": "Gezondheid batterij" },
+      "battery_voltage": { "name": "Batterijspanning" },
+      "battery_current": { "name": "Batterijstroom" },
+      "electricity_price": { "name": "Elektriciteitsprijs" },
+      "generic_load_max_price": { "name": "Maximumprijs generieke last" }
+    }
+  },
+  "exceptions": {
+    "cannot_connect": {
+      "message": "Kan de FlexiObox op {host} niet bereiken"
+    },
+    "invalid_response": {
+      "message": "De FlexiObox gaf een onverwacht antwoord"
+    }
+  }
+}

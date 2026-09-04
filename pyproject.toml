@@ -1,0 +1,34 @@
+[tool.ruff]
+target-version = "py313"
+line-length = 88
+
+[tool.ruff.lint]
+select = [
+  "A", "ANN", "ASYNC", "B", "C4", "D", "E", "F", "I", "ICN", "INP", "ISC",
+  "N", "PGH", "PIE", "PL", "PT", "RET", "RSE", "RUF", "SIM", "SLOT", "T20",
+  "TID", "TRY", "UP", "W",
+]
+ignore = [
+  "ANN401",
+  "D203",
+  "D213",
+  "TRY003",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["ANN", "D", "PLR2004"]
+
+[tool.ruff.lint.isort]
+force-sort-within-sections = true
+known-first-party = ["custom_components"]
+combine-as-imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+warn_unreachable = true
+disallow_any_generics = true
