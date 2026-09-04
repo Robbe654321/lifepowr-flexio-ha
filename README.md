@@ -8,18 +8,21 @@ no polling of anyone's servers — everything stays on your own network.
 
 ## Supported devices
 
-Any FlexiObox serving the *FlexiO Device API* on the local network, verified
-against firmware 1.148.3. The box must be on the same network as your Home
-Assistant instance; its on-device API documentation is at
-`http://myio.local/api/docs`.
+Any FlexiObox serving the *FlexiO Device API* on the local network. Verified
+against firmware 1.148.10 driving a Goodwe GW12K-ET-20. The box must be on the
+same network as your Home Assistant instance; its on-device API documentation
+is at `http://myio.local/api/docs`.
 
 ## Features
 
 - **Local polling** every 15 seconds over HTTP, no authentication required.
 - **Automatic schema detection.** LIFEPOWR's website documentation disagrees
-  with the on-device OpenAPI spec about endpoint paths, the write method, and
-  the spelling of several fields. The integration probes the box on first setup
-  and adapts to whichever layout and spelling your firmware actually uses.
+  with the on-device OpenAPI spec about endpoint paths, the write method, the
+  spelling of several fields, and the unit of every power reading. The
+  integration probes the box on first setup and adapts to whichever layout and
+  spelling your firmware actually uses.
+- **Correct units and signs.** The API reports watts, not the kilowatts the
+  website claims, and signs consumption negative. See below.
 - **Writable price cap** for the generic load, when the box exposes it.
 - **Only real entities.** Measurements your box does not report are not created,
   rather than showing up as permanently unknown.
@@ -29,16 +32,16 @@ Assistant instance; its on-device API documentation is at
 
 | Entity | Unit | Notes |
 | --- | --- | --- |
-| Solar production | kW | Total PV production |
-| Household consumption | kW | Load power |
-| Grid power | kW | Bidirectional; sign convention depends on firmware |
-| Inverter power | kW | Bidirectional battery flow |
-| Inverter setpoint | kW | Only on firmware that reports `powerSetpoint` |
-| Generic load available power | kW | Generic Load Controller |
+| Solar production | W | Total PV production |
+| Household consumption | W | Positive while consuming |
+| Grid power | W | Positive importing, negative exporting |
+| Inverter power | W | Positive discharging, negative charging the battery |
+| Inverter setpoint | W | Only on firmware that reports `powerSetpoint` |
+| Generic load available power | W | Generic Load Controller |
 | Battery state of charge | % | |
 | Battery state of health | % | |
-| Battery voltage | V | Disabled by default |
-| Battery current | A | Disabled by default |
+| Battery voltage | V | |
+| Battery current | A | Negative while charging |
 | Electricity price | €/kWh | Current consumption price |
 | Last measurement | timestamp | Diagnostic, disabled by default |
 | Converter | — | Diagnostic; the paired inverter, from `/api/info/converter` |
@@ -92,10 +95,8 @@ homeassistant:
 to `configuration.yaml`, restart, and map the sensors as described in the
 comments at the bottom of that file.
 
-> **Check the sign convention once.** The package assumes positive grid power
-> means import and positive inverter power means discharge. Watch both sensors
-> on a sunny moment; if your box is the other way round, swap the `max`/`min`
-> expressions in the template sensors.
+The package reads the integration's already-normalised entities, so nothing in
+it needs adjusting.
 
 ## Checking your box before installing
 
@@ -106,14 +107,44 @@ without installing anything — standard library only, no Home Assistant:
 $ python3 scripts/check_box.py            # or: check_box.py 192.168.1.20
 ```
 
-It reports which endpoints answer, which fields are recognised, warns about
-any field it does not know yet, and checks the three things the API
-documentation leaves open: the units of the battery voltage and current, the
-unit of the timestamp, and the sign convention of the grid and inverter power.
-It writes nothing unless you pass `--set-max-price 0.30`, which exercises the
-one write endpoint.
+It reports which endpoints answer, which fields are recognised, and warns about
+any field it does not know yet. It then runs two energy balances against your
+live readings to confirm the unit and sign convention (see below), and checks
+that the timestamp resolves to roughly now. It writes nothing unless you pass
+`--set-max-price 0.30`, which exercises the one write endpoint.
 
 If it flags an unmapped field, please open an issue with its name and value.
+
+## Units and sign convention
+
+Two things the documentation gets wrong, both confirmed against real hardware:
+
+**The API reports watts, not kilowatts.** The website's table says kW for every
+power field. A box importing `-5341.34` is drawing 5.3 kW, not 5.3 MW. The
+integration reports watts.
+
+**Consumption is negative.** The API uses a load convention: importing from the
+grid, consuming in the house and charging the battery are all negative. Solar
+production is positive. Home Assistant expects the opposite for grid and
+consumption, so the integration negates those two; battery flow keeps its raw
+sign, where positive already means discharging.
+
+A real sample, with the balance that pins this down:
+
+```
+totalPVPowerFiltered      1160.6   TotalInvPowerFiltered  -2456.2
+LoadPowerFiltered        -3002.1   MeterPowerFiltered     -5341.3
+batteryVoltageInvFiltered  421.4   batteryCurrentInvFiltered  -8.31
+
+grid ≈ load + inverter          -5341 ≈ -5458    (2.2% filter lag)
+battery DC ≈ inverter - PV      -3500 ≈ -3617    (3.3% conversion loss)
+```
+
+Both identities close, which is only possible in watts with this sign
+convention. Home Assistant then shows: grid 5341 W importing, consumption
+3002 W, solar 1161 W, battery -2456 W charging.
+
+`scripts/check_box.py` re-runs both balances against your own box.
 
 ## Endpoints used
 

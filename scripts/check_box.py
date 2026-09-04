@@ -39,6 +39,8 @@ KEY_BATTERY_CURRENT = _P.KEY_BATTERY_CURRENT
 KEY_BATTERY_VOLTAGE = _P.KEY_BATTERY_VOLTAGE
 KEY_GRID_POWER = _P.KEY_GRID_POWER
 KEY_INVERTER_POWER = _P.KEY_INVERTER_POWER
+KEY_LOAD_POWER = _P.KEY_LOAD_POWER
+KEY_PV_POWER = _P.KEY_PV_POWER
 KEY_TIMESTAMP = _P.KEY_TIMESTAMP
 PATH_CONVERTER = _P.PATH_CONVERTER
 PATH_GENERIC_LOAD = _P.PATH_GENERIC_LOAD
@@ -179,12 +181,61 @@ def main() -> int:
 
     grid = data.get(KEY_GRID_POWER)
     inverter = data.get(KEY_INVERTER_POWER)
+    load = data.get(KEY_LOAD_POWER)
+    pv = data.get(KEY_PV_POWER)
+
+    # Units: the website documentation claims kW; real firmware reports W.
+    magnitudes = [abs(v) for v in (grid, load, pv, inverter) if v]
+    if not magnitudes:
+        print(f"  {WARN} no power readings to check the unit against")
+    elif max(magnitudes) > 100:
+        print(f"  {OK} power values up to {max(magnitudes):.0f} -- watts, as assumed")
+    else:
+        print(
+            f"  {WARN} all power values below 100 ({max(magnitudes):.2f} max)."
+            " Either the house is idle, or this firmware reports kW."
+            " Re-run while something heavy is on."
+        )
+
+    # Energy balance: two independent identities that should close to a few
+    # percent. They confirm both the unit and the sign convention.
+    if None not in (grid, load, inverter):
+        drift = abs(grid - (load + inverter))
+        scale = max(abs(grid), 1)
+        mark = OK if drift / scale < 0.10 else BAD
+        print(
+            f"  {mark} balance: grid {grid:.0f} vs load+inverter"
+            f" {load + inverter:.0f} ({drift / scale * 100:.1f}% off)"
+        )
+    if None not in (data.get(KEY_BATTERY_VOLTAGE), current, inverter, pv):
+        battery_dc = data[KEY_BATTERY_VOLTAGE] * current
+        ac_side = inverter - pv
+        drift = abs(battery_dc - ac_side)
+        scale = max(abs(battery_dc), 1)
+        mark = OK if drift / scale < 0.15 else WARN
+        print(
+            f"  {mark} balance: battery {battery_dc:.0f} W vs inverter-PV"
+            f" {ac_side:.0f} W ({drift / scale * 100:.1f}% -- conversion loss)"
+        )
+
+    # Sign convention.
+    if load is not None:
+        if load < 0:
+            print(
+                f"  {OK} load convention: consumption is negative ({load:.0f}),"
+                " as expected -- the integration flips grid and load"
+            )
+        else:
+            print(
+                f"  {WARN} household consumption is positive ({load:.0f})."
+                " This firmware may not use the load convention;"
+                " please report it, the sensors will read inverted."
+            )
     print(
-        f"\n  Grid power {grid} kW, inverter power {inverter} kW.\n"
-        "  The energy package assumes positive grid = importing and positive\n"
-        "  inverter = discharging. Compare these against what your meter and\n"
-        "  battery are actually doing right now, and swap the max/min\n"
-        "  expressions in packages/lifepowr_energy.yaml if they are reversed."
+        f"\n  After conversion Home Assistant will show: grid"
+        f" {-grid:.0f} W ({'importing' if grid and grid < 0 else 'exporting'}),"
+        f" consumption {-load:.0f} W, solar {pv:.0f} W, battery"
+        f" {inverter:.0f} W ({'charging' if inverter and inverter < 0 else 'discharging'})."
     )
 
     # --- Optional write --------------------------------------------------

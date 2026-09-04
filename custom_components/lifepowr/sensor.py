@@ -40,6 +40,18 @@ def _as_timestamp(value: float) -> datetime | None:
     return datetime.fromtimestamp(seconds, tz=UTC)
 
 
+def _invert(value: float) -> float:
+    """Flip the box's load convention to Home Assistant's.
+
+    The API signs consumption negative: importing from the grid and consuming
+    in the house are both reported as negative numbers. Home Assistant expects
+    the opposite for these two, so they are negated. Battery flow keeps the
+    raw sign, where positive already means discharging, and solar production
+    is already positive.
+    """
+    return -value
+
+
 @dataclass(frozen=True, kw_only=True)
 class FlexioSensorEntityDescription(SensorEntityDescription):
     """Describe a FlexiO sensor."""
@@ -47,11 +59,12 @@ class FlexioSensorEntityDescription(SensorEntityDescription):
     value_fn: Callable[[float], StateType | datetime] = lambda value: value
 
 
+#: The box reports watts, despite the website documentation claiming kW.
 POWER_SENSOR: dict[str, Any] = {
     "device_class": SensorDeviceClass.POWER,
     "state_class": SensorStateClass.MEASUREMENT,
-    "native_unit_of_measurement": UnitOfPower.KILO_WATT,
-    "suggested_display_precision": 2,
+    "native_unit_of_measurement": UnitOfPower.WATT,
+    "suggested_display_precision": 0,
 }
 
 SENSORS: tuple[FlexioSensorEntityDescription, ...] = (
@@ -59,10 +72,16 @@ SENSORS: tuple[FlexioSensorEntityDescription, ...] = (
         key=api.KEY_PV_POWER, translation_key="pv_power", **POWER_SENSOR
     ),
     FlexioSensorEntityDescription(
-        key=api.KEY_LOAD_POWER, translation_key="load_power", **POWER_SENSOR
+        key=api.KEY_LOAD_POWER,
+        translation_key="load_power",
+        value_fn=_invert,
+        **POWER_SENSOR,
     ),
     FlexioSensorEntityDescription(
-        key=api.KEY_GRID_POWER, translation_key="grid_power", **POWER_SENSOR
+        key=api.KEY_GRID_POWER,
+        translation_key="grid_power",
+        value_fn=_invert,
+        **POWER_SENSOR,
     ),
     FlexioSensorEntityDescription(
         key=api.KEY_INVERTER_POWER, translation_key="inverter_power", **POWER_SENSOR
@@ -97,7 +116,6 @@ SENSORS: tuple[FlexioSensorEntityDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=UnitOfElectricPotential.VOLT,
         suggested_display_precision=1,
-        entity_registry_enabled_default=False,
     ),
     FlexioSensorEntityDescription(
         key=api.KEY_BATTERY_CURRENT,
@@ -106,7 +124,6 @@ SENSORS: tuple[FlexioSensorEntityDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
         suggested_display_precision=1,
-        entity_registry_enabled_default=False,
     ),
     FlexioSensorEntityDescription(
         key=api.KEY_ELECTRICITY_PRICE,

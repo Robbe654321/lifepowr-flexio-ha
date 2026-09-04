@@ -29,7 +29,7 @@ async def test_state(hass, init_integration) -> None:
     """The current cap is exposed as the entity state."""
     state = hass.states.get(ENTITY_ID)
     assert state is not None
-    assert state.state == "0.25"
+    assert state.state == "0.0"
 
 
 async def test_set_value(hass, init_integration, mock_client) -> None:

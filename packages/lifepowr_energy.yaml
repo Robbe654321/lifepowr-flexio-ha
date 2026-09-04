@@ -1,6 +1,6 @@
 # LIFEPOWR FlexiO — Energy dashboard package
 #
-# The FlexiObox only reports live power (kW). The Energy dashboard needs
+# The FlexiObox only reports live power (W). The Energy dashboard needs
 # cumulative energy (kWh), so this package:
 #   1. splits the bidirectional grid and battery power into separate
 #      positive-only directions, and
@@ -14,70 +14,74 @@
 # to configuration.yaml, then restart Home Assistant.
 #
 # ---------------------------------------------------------------------------
-# SIGN CONVENTION — verify this once before trusting the totals.
-# This package assumes:
-#   sensor.flexio_grid_power     > 0 = importing from the grid, < 0 = exporting
+# SIGN CONVENTION
+# The API uses a load convention: importing from the grid and consuming in the
+# house are both reported as NEGATIVE watts. The integration already flips
+# those two, so the entities this package reads use Home Assistant's
+# convention, verified against firmware 1.148.10:
+#
+#   sensor.flexio_grid_power     > 0 = importing,        < 0 = exporting
 #   sensor.flexio_inverter_power > 0 = battery discharging, < 0 = charging
-# Watch both sensors for a few minutes on a sunny moment. If the signs are
-# reversed on your box, swap the `max` and `min` expressions in the two pairs
-# of template sensors below — nothing else needs to change.
+#
+# Nothing here needs adjusting unless a future firmware changes that.
 # ---------------------------------------------------------------------------
 
 template:
   - sensor:
       - name: "FlexiO grid import power"
         unique_id: flexio_grid_import_power
-        unit_of_measurement: kW
+        unit_of_measurement: W
         device_class: power
         state_class: measurement
         availability: >
           {{ states('sensor.flexio_grid_power')
              not in ['unknown', 'unavailable', 'none'] }}
         state: >
-          {{ [states('sensor.flexio_grid_power') | float(0), 0] | max | round(3) }}
+          {{ [states('sensor.flexio_grid_power') | float(0), 0] | max | round(1) }}
 
       - name: "FlexiO grid export power"
         unique_id: flexio_grid_export_power
-        unit_of_measurement: kW
+        unit_of_measurement: W
         device_class: power
         state_class: measurement
         availability: >
           {{ states('sensor.flexio_grid_power')
              not in ['unknown', 'unavailable', 'none'] }}
         state: >
-          {{ ([states('sensor.flexio_grid_power') | float(0), 0] | min) | abs | round(3) }}
+          {{ ([states('sensor.flexio_grid_power') | float(0), 0] | min) | abs | round(1) }}
 
       - name: "FlexiO battery discharge power"
         unique_id: flexio_battery_discharge_power
-        unit_of_measurement: kW
+        unit_of_measurement: W
         device_class: power
         state_class: measurement
         availability: >
           {{ states('sensor.flexio_inverter_power')
              not in ['unknown', 'unavailable', 'none'] }}
         state: >
-          {{ [states('sensor.flexio_inverter_power') | float(0), 0] | max | round(3) }}
+          {{ [states('sensor.flexio_inverter_power') | float(0), 0] | max | round(1) }}
 
       - name: "FlexiO battery charge power"
         unique_id: flexio_battery_charge_power
-        unit_of_measurement: kW
+        unit_of_measurement: W
         device_class: power
         state_class: measurement
         availability: >
           {{ states('sensor.flexio_inverter_power')
              not in ['unknown', 'unavailable', 'none'] }}
         state: >
-          {{ ([states('sensor.flexio_inverter_power') | float(0), 0] | min) | abs | round(3) }}
+          {{ ([states('sensor.flexio_inverter_power') | float(0), 0] | min) | abs | round(1) }}
 
-# Trapezoidal integration of kW over hours gives kWh directly, so no
-# unit_prefix is needed. max_sub_interval keeps the totals moving even when a
-# power value sits perfectly still between updates.
+# The sources are in watts, so unit_prefix: k is required to land on kWh
+# rather than Wh. max_sub_interval keeps the totals moving even when a power
+# value sits perfectly still between updates.
 sensor:
   - platform: integration
     name: "FlexiO solar production energy"
     unique_id: flexio_solar_production_energy
     source: sensor.flexio_solar_production
     method: trapezoidal
+    unit_prefix: k
     unit_time: h
     round: 3
     max_sub_interval:
@@ -88,6 +92,7 @@ sensor:
     unique_id: flexio_household_consumption_energy
     source: sensor.flexio_household_consumption
     method: trapezoidal
+    unit_prefix: k
     unit_time: h
     round: 3
     max_sub_interval:
@@ -98,6 +103,7 @@ sensor:
     unique_id: flexio_grid_import_energy
     source: sensor.flexio_grid_import_power
     method: trapezoidal
+    unit_prefix: k
     unit_time: h
     round: 3
     max_sub_interval:
@@ -108,6 +114,7 @@ sensor:
     unique_id: flexio_grid_export_energy
     source: sensor.flexio_grid_export_power
     method: trapezoidal
+    unit_prefix: k
     unit_time: h
     round: 3
     max_sub_interval:
@@ -118,6 +125,7 @@ sensor:
     unique_id: flexio_battery_charge_energy
     source: sensor.flexio_battery_charge_power
     method: trapezoidal
+    unit_prefix: k
     unit_time: h
     round: 3
     max_sub_interval:
@@ -128,6 +136,7 @@ sensor:
     unique_id: flexio_battery_discharge_energy
     source: sensor.flexio_battery_discharge_power
     method: trapezoidal
+    unit_prefix: k
     unit_time: h
     round: 3
     max_sub_interval:

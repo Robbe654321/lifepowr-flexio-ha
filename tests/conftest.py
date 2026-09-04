@@ -17,21 +17,23 @@ pytest_plugins = "pytest_homeassistant_custom_component"
 
 HOST = "myio.local"
 
-#: Mirrors the example values in the on-device OpenAPI document, mapped onto
-#: the integration's internal keys.
+#: A real sample from a FlexiObox on firmware 1.148.10 (Goodwe GW12K-ET-20),
+#: mapped onto the integration's internal keys. The box was importing 5341 W
+#: while charging the battery, so grid, load and inverter are all negative in
+#: the API's load convention.
 SAMPLE_DATA = {
-    "pv_power": 3.42,
-    "load_power": 1.15,
-    "grid_power": -2.27,
-    "inverter_power": 0.85,
-    "generic_load_power": 2.0,
-    "battery_soc": 78.0,
-    "battery_soh": 99.0,
-    "battery_voltage": 51.2,
-    "battery_current": 16.6,
-    "electricity_price": 0.1234,
-    "generic_load_max_price": 0.25,
-    "timestamp": 1757000000.0,
+    "pv_power": 1160.6180623644536,
+    "load_power": -3002.070671301206,
+    "grid_power": -5341.344422408456,
+    "inverter_power": -2456.2038037467037,
+    "generic_load_power": 2811.2092604513246,
+    "battery_soc": 18.684592614842874,
+    "battery_soh": 100.00000000029866,
+    "battery_voltage": 421.3937611738297,
+    "battery_current": -8.305514072449588,
+    "electricity_price": 0.168179388,
+    "generic_load_max_price": 0.0,
+    "timestamp": 1788521155668.0,
 }
 
 

@@ -10,7 +10,14 @@ from syrupy.assertion import SnapshotAssertion
 
 from custom_components.lifepowr.api import FlexioConnectionError
 from custom_components.lifepowr.const import SCAN_INTERVAL
-from homeassistant.const import STATE_UNAVAILABLE
+from homeassistant.const import (
+    ATTR_UNIT_OF_MEASUREMENT,
+    PERCENTAGE,
+    STATE_UNAVAILABLE,
+    UnitOfElectricCurrent,
+    UnitOfElectricPotential,
+    UnitOfPower,
+)
 from homeassistant.helpers import entity_registry as er
 
 from pytest_homeassistant_custom_component.common import (
@@ -75,35 +82,71 @@ async def test_entities_become_unavailable(
     freezer: FrozenDateTimeFactory,
 ) -> None:
     """Losing the box marks the entities unavailable instead of freezing them."""
-    assert hass.states.get("sensor.flexio_solar_production").state == "3.42"
+    solar = "sensor.flexio_solar_production"
+    assert float(hass.states.get(solar).state) == pytest.approx(1160.6, abs=0.1)
 
     mock_client.async_get_data.side_effect = FlexioConnectionError
     freezer.tick(SCAN_INTERVAL + timedelta(seconds=1))
     async_fire_time_changed(hass)
     await hass.async_block_till_done()
 
-    assert hass.states.get("sensor.flexio_solar_production").state == STATE_UNAVAILABLE
+    assert hass.states.get(solar).state == STATE_UNAVAILABLE
 
     mock_client.async_get_data.side_effect = None
     freezer.tick(SCAN_INTERVAL + timedelta(seconds=1))
     async_fire_time_changed(hass)
     await hass.async_block_till_done()
 
-    assert hass.states.get("sensor.flexio_solar_production").state == "3.42"
+    assert float(hass.states.get(solar).state) == pytest.approx(1160.6, abs=0.1)
 
 
 @pytest.mark.parametrize(
-    ("entity_id", "expected"),
+    ("entity_id", "expected", "unit"),
     [
-        ("sensor.flexio_solar_production", "3.42"),
-        ("sensor.flexio_household_consumption", "1.15"),
-        ("sensor.flexio_grid_power", "-2.27"),
-        ("sensor.flexio_battery_state_of_charge", "78.0"),
-        ("sensor.flexio_electricity_price", "0.1234"),
+        # Solar and battery flow keep the API's sign; the box was charging,
+        # hence the negative inverter power.
+        ("sensor.flexio_solar_production", 1160.6, UnitOfPower.WATT),
+        ("sensor.flexio_inverter_power", -2456.2, UnitOfPower.WATT),
+        # Consumption and grid import are negative in the API's load
+        # convention and must come out positive.
+        ("sensor.flexio_household_consumption", 3002.1, UnitOfPower.WATT),
+        ("sensor.flexio_grid_power", 5341.3, UnitOfPower.WATT),
+        ("sensor.flexio_battery_state_of_charge", 18.7, PERCENTAGE),
+        ("sensor.flexio_battery_voltage", 421.4, UnitOfElectricPotential.VOLT),
+        ("sensor.flexio_battery_current", -8.3, UnitOfElectricCurrent.AMPERE),
+        ("sensor.flexio_electricity_price", 0.168, "€/kWh"),
     ],
 )
-async def test_sensor_values(hass, init_integration, entity_id, expected) -> None:
-    """Values are passed through without rescaling."""
+async def test_sensor_values(
+    hass, init_integration, entity_id, expected, unit
+) -> None:
+    """Values are reported in watts, with grid and load normalised."""
     state = hass.states.get(entity_id)
     assert state is not None, f"{entity_id} was not created"
-    assert state.state == expected
+    assert float(state.state) == pytest.approx(expected, abs=0.1)
+    assert state.attributes[ATTR_UNIT_OF_MEASUREMENT] == unit
+
+
+async def test_power_is_not_kilowatts(hass, init_integration) -> None:
+    """Guard against the website documentation's claim that values are kW.
+
+    A household drawing 5341 kW from the grid is impossible; this test fails
+    loudly if the unit is ever changed back.
+    """
+    state = hass.states.get("sensor.flexio_grid_power")
+    assert state.attributes[ATTR_UNIT_OF_MEASUREMENT] == UnitOfPower.WATT
+    assert abs(float(state.state)) > 1000
+
+
+async def test_last_measurement_parses_milliseconds(
+    hass, init_integration, entity_registry: er.EntityRegistry
+) -> None:
+    """The box's epoch is in milliseconds and must not land in the far future."""
+    entity_id = "sensor.flexio_last_measurement"
+    entity_registry.async_update_entity(entity_id, disabled_by=None)
+    await hass.config_entries.async_reload(init_integration.entry_id)
+    await hass.async_block_till_done()
+
+    state = hass.states.get(entity_id)
+    assert state is not None
+    assert state.state.startswith("2026-")
