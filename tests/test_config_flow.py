@@ -38,7 +38,7 @@ async def test_user_flow(hass, mock_client) -> None:
 )
 async def test_user_flow_errors(hass, mock_client, side_effect, error) -> None:
     """Errors are shown on the form and the flow can be retried."""
-    mock_client.async_detect_layout.side_effect = side_effect
+    mock_client.async_setup.side_effect = side_effect
 
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": SOURCE_USER}
@@ -49,7 +49,7 @@ async def test_user_flow_errors(hass, mock_client, side_effect, error) -> None:
     assert result["type"] is FlowResultType.FORM
     assert result["errors"] == {"base": error}
 
-    mock_client.async_detect_layout.side_effect = None
+    mock_client.async_setup.side_effect = None
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_HOST: HOST}
     )
@@ -86,7 +86,7 @@ async def test_reconfigure(hass, mock_client, init_integration) -> None:
 
 async def test_reconfigure_error(hass, mock_client, init_integration) -> None:
     """An unreachable new host keeps the old configuration."""
-    mock_client.async_detect_layout.side_effect = FlexioConnectionError
+    mock_client.async_setup.side_effect = FlexioConnectionError
 
     result = await init_integration.start_reconfigure_flow(hass)
     result = await hass.config_entries.flow.async_configure(

@@ -36,7 +36,7 @@ class FlexioConfigFlow(ConfigFlow, domain=DOMAIN):
         """Return an error key, or None when the host is a working FlexiObox."""
         client = FlexioClient(async_get_clientsession(self.hass), host)
         try:
-            await client.async_detect_layout()
+            await client.async_setup()
         except FlexioConnectionError:
             return "cannot_connect"
         except FlexioError:

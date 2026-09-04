@@ -17,12 +17,13 @@ pytest_plugins = "pytest_homeassistant_custom_component"
 
 HOST = "myio.local"
 
+#: Mirrors the example values in the on-device OpenAPI document, mapped onto
+#: the integration's internal keys.
 SAMPLE_DATA = {
     "pv_power": 3.42,
     "load_power": 1.15,
     "grid_power": -2.27,
     "inverter_power": 0.85,
-    "power_setpoint": 1.0,
     "generic_load_power": 2.0,
     "battery_soc": 78.0,
     "battery_soh": 99.0,
@@ -30,6 +31,7 @@ SAMPLE_DATA = {
     "battery_current": 16.6,
     "electricity_price": 0.1234,
     "generic_load_max_price": 0.25,
+    "timestamp": 1757000000.0,
 }
 
 
@@ -64,9 +66,13 @@ def mock_client() -> Generator[AsyncMock]:
         client = mock_setup_client.return_value
         client.host = HOST
         client.base_url = f"http://{HOST}/api"
-        client.layout = Layout.AGGREGATE
-        client.async_detect_layout.return_value = Layout.AGGREGATE
+        client.layout = Layout.MEASUREMENTS
+        client.version = "1.148.3"
+        client.converter = "SolarEdge"
+        client.supports_write = True
+        client.async_setup.return_value = Layout.MEASUREMENTS
         client.async_get_data.return_value = dict(SAMPLE_DATA)
+        client.async_set_generic_load_max_price.return_value = 0.3
         yield client
 
 

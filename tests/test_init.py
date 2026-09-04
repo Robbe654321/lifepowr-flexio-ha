@@ -24,7 +24,7 @@ async def test_setup_retries_when_box_unavailable(
     hass, mock_config_entry, mock_client, side_effect
 ) -> None:
     """An unreachable box leaves the entry in the retry state."""
-    mock_client.async_detect_layout.side_effect = side_effect
+    mock_client.async_setup.side_effect = side_effect
     mock_config_entry.add_to_hass(hass)
 
     assert not await hass.config_entries.async_setup(mock_config_entry.entry_id)

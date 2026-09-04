@@ -33,6 +33,9 @@
     }
   },
   "entity": {
+    "number": {
+      "generic_load_max_price": { "name": "Generic load maximum price" }
+    },
     "sensor": {
       "pv_power": { "name": "Solar production" },
       "load_power": { "name": "Household consumption" },
@@ -45,7 +48,8 @@
       "battery_voltage": { "name": "Battery voltage" },
       "battery_current": { "name": "Battery current" },
       "electricity_price": { "name": "Electricity price" },
-      "generic_load_max_price": { "name": "Generic load maximum price" }
+      "last_measurement": { "name": "Last measurement" },
+      "converter": { "name": "Converter" }
     }
   },
   "exceptions": {
@@ -54,6 +58,12 @@
     },
     "invalid_response": {
       "message": "The FlexiObox returned an unexpected response"
+    },
+    "invalid_price": {
+      "message": "The FlexiObox rejected {price} as a maximum price. Prices must not be negative."
+    },
+    "write_failed": {
+      "message": "Failed to write the new maximum price to the FlexiObox at {host}"
     }
   }
 }

@@ -16,6 +16,9 @@ async def async_get_config_entry_diagnostics(
     coordinator = entry.runtime_data
     return {
         "layout": coordinator.client.layout,
+        "version": coordinator.client.version,
+        "converter": coordinator.client.converter,
+        "supports_write": coordinator.client.supports_write,
         "last_update_success": coordinator.last_update_success,
         "data": coordinator.data,
     }

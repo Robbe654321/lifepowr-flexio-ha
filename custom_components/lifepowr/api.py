@@ -1,11 +1,12 @@
 """Client for the LIFEPOWR FlexiO local API.
 
-The FlexiObox exposes an unauthenticated REST API on the local network. The
-public documentation describes two different response layouts and is
-inconsistent about field spelling (``totaalPVPowerFiltered`` vs
-``totalPVPowerFiltered``, ``powetSetpoint`` vs ``powerSetpoint``, ...), so this
-client probes the box once and then normalises whatever it finds onto a stable
-set of internal keys.
+Endpoint and field names follow the on-device OpenAPI document
+(``FlexiO Device API``, firmware 1.148.3). The published web documentation
+disagrees with that spec on several points -- it lists ``/api/ems`` instead of
+``/api/ems/measurements``, ``PUT /api/ems/load_control`` instead of
+``POST /api/ems/generic-load``, and misspells a few fields -- so the client
+probes for the legacy layouts as a fallback and normalises whatever field
+spelling it finds onto a stable set of internal keys.
 """
 
 from __future__ import annotations
@@ -31,12 +32,18 @@ class FlexioResponseError(FlexioError):
     """Raised when the box returns something unusable."""
 
 
+class FlexioValueError(FlexioError):
+    """Raised when the box rejects a value we tried to write."""
+
+
 class Layout(StrEnum):
     """Response layout used by this particular firmware."""
 
-    #: A single ``/api/ems`` document holding every measurement.
-    AGGREGATE = "aggregate"
-    #: One endpoint per measurement, e.g. ``/api/stateOfChargeFiltered``.
+    #: Documented by the on-device OpenAPI spec: /api/ems/measurements.
+    MEASUREMENTS = "measurements"
+    #: Older/alternative layout described by the public web docs: /api/ems.
+    LEGACY_EMS = "legacy_ems"
+    #: One endpoint per measurement, e.g. /api/stateOfChargeFiltered.
     PER_FIELD = "per_field"
 
 
@@ -53,21 +60,22 @@ KEY_POWER_SETPOINT: Final = "power_setpoint"
 KEY_ELECTRICITY_PRICE: Final = "electricity_price"
 KEY_GENERIC_LOAD_POWER: Final = "generic_load_power"
 KEY_GENERIC_LOAD_MAX_PRICE: Final = "generic_load_max_price"
+KEY_TIMESTAMP: Final = "timestamp"
 
-#: Raw field names, as documented, per internal key. Matching is done on a
-#: normalised (lowercase, alphanumeric-only) form so casing and separators in
-#: the firmware's actual spelling do not matter.
+#: Raw field names per internal key. Matching is done on a normalised
+#: (lowercase, alphanumeric-only) form, so casing and separators do not matter
+#: and only genuinely different spellings need to be listed.
 FIELD_ALIASES: Final[dict[str, tuple[str, ...]]] = {
     KEY_BATTERY_CURRENT: ("batteryCurrentInvFiltered",),
     KEY_BATTERY_VOLTAGE: ("batteryVoltageInvFiltered",),
-    # Matching is case-insensitive, so only genuinely different spellings need
-    # to be listed here.
-    KEY_INVERTER_POWER: ("totalInvPowerFiltered",),
+    KEY_INVERTER_POWER: ("TotalInvPowerFiltered",),
     KEY_LOAD_POWER: ("LoadPowerFiltered",),
     KEY_GRID_POWER: ("MeterPowerFiltered",),
     KEY_PV_POWER: ("totalPVPowerFiltered", "totaalPVPowerFiltered"),
     KEY_BATTERY_SOC: ("stateOfChargeFiltered",),
     KEY_BATTERY_SOH: ("stateOfHealthFiltered",),
+    # Not present in the OpenAPI spec, but documented on the website; harmless
+    # to look for and picked up automatically if a firmware exposes it.
     KEY_POWER_SETPOINT: ("powerSetpoint", "powetSetpoint"),
     KEY_ELECTRICITY_PRICE: (
         "consumptionElectricityPrice",
@@ -75,16 +83,22 @@ FIELD_ALIASES: Final[dict[str, tuple[str, ...]]] = {
     ),
     KEY_GENERIC_LOAD_POWER: ("powerSetpointGeneric",),
     KEY_GENERIC_LOAD_MAX_PRICE: ("genericLoadMaximumElectricityPrice",),
+    KEY_TIMESTAMP: ("timestamp",),
 }
 
-#: Keys that the docs place behind ``/api/ems/load_control`` rather than
-#: ``/api/ems``.
-LOAD_CONTROL_KEYS: Final = frozenset(
-    {KEY_GENERIC_LOAD_POWER, KEY_GENERIC_LOAD_MAX_PRICE}
-)
+PATH_VERSION: Final = "info/version"
+PATH_CONVERTER: Final = "info/converter"
+PATH_MEASUREMENTS: Final = "ems/measurements"
+PATH_GENERIC_LOAD: Final = "ems/generic-load"
+#: Layouts described by the public web docs, tried only as a fallback.
+PATH_LEGACY_EMS: Final = "ems"
+PATH_LEGACY_LOAD_CONTROL: Final = "ems/load_control"
 
-PATH_EMS: Final = "ems"
-PATH_LOAD_CONTROL: Final = "ems/load_control"
+#: Body field the box expects when setting the generic load price cap.
+FIELD_NEW_MAX_PRICE: Final = "newMaxPrice"
+
+#: Epoch values above this are milliseconds rather than seconds.
+_MS_THRESHOLD: Final = 1e11
 
 
 def _normalise(name: str) -> str:
@@ -121,11 +135,23 @@ def _coerce_value(raw: Any) -> float | None:
     return None
 
 
+def normalise_timestamp(raw: float) -> float | None:
+    """Return a POSIX timestamp in seconds, or None when unusable.
+
+    The box reports an epoch whose unit is not stated in the spec; values that
+    are implausibly large are treated as milliseconds. A zero timestamp means
+    "never set" and is discarded.
+    """
+    if raw <= 0:
+        return None
+    return raw / 1000 if raw > _MS_THRESHOLD else raw
+
+
 def parse_payload(payload: Any) -> dict[str, float]:
     """Map an arbitrary API document onto the internal keys.
 
-    Unknown fields are ignored; nested objects are walked one level deep so a
-    ``{"ems": {...}}`` style envelope is handled too.
+    Unknown fields are ignored; nested objects are walked a few levels deep so
+    a ``{"ems": {...}}`` style envelope is handled too.
     """
     result: dict[str, float] = {}
 
@@ -154,6 +180,8 @@ class FlexioClient:
         self._session = session
         self._host = host.strip().rstrip("/")
         self.layout: Layout | None = None
+        self.version: str | None = None
+        self.converter: str | None = None
         #: Raw field names discovered on this box, per internal key. Only used
         #: by the per-field layout.
         self._field_paths: dict[str, str] = {}
@@ -171,48 +199,73 @@ class FlexioClient:
             host = f"http://{host}"
         return f"{host}/api"
 
-    async def _get(self, path: str) -> Any:
-        """Perform a GET and return the decoded body."""
+    @property
+    def supports_write(self) -> bool:
+        """Return True when this box exposes the generic load POST endpoint."""
+        return self.layout is Layout.MEASUREMENTS
+
+    async def _request(
+        self, method: str, path: str, json: dict[str, Any] | None = None
+    ) -> Any:
+        """Perform a request and return the decoded body."""
         url = f"{self.base_url}/{path.lstrip('/')}"
         try:
             async with asyncio.timeout(REQUEST_TIMEOUT):
-                response = await self._session.get(url)
-                if response.status == 404:
-                    raise FlexioResponseError(f"{url} returned 404")
+                response = await self._session.request(method, url, json=json)
+                if response.status == 400:
+                    raise FlexioValueError(f"{url} rejected the value")
+                if response.status in (404, 500):
+                    raise FlexioResponseError(f"{url} returned {response.status}")
                 response.raise_for_status()
                 # The box has been observed serving JSON as text/plain.
                 return await response.json(content_type=None)
         except ClientResponseError as err:
             raise FlexioResponseError(f"{url} returned {err.status}") from err
-        except (ClientError, asyncio.TimeoutError, TimeoutError) as err:
+        except (ClientError, TimeoutError) as err:
             raise FlexioConnectionError(f"Cannot reach {url}: {err}") from err
         except ValueError as err:
             raise FlexioResponseError(f"{url} returned invalid JSON") from err
 
-    async def async_detect_layout(self) -> Layout:
-        """Determine which response layout this box uses.
+    async def _get(self, path: str) -> Any:
+        """Perform a GET and return the decoded body."""
+        return await self._request("GET", path)
+
+    async def _try_get(self, path: str) -> Any | None:
+        """GET a path, returning None instead of raising on a bad response."""
+        try:
+            return await self._get(path)
+        except FlexioResponseError:
+            return None
+
+    async def async_setup(self) -> Layout:
+        """Determine the layout and collect device information.
 
         Raises FlexioConnectionError when the box is unreachable and
         FlexioResponseError when it responds but exposes nothing recognisable.
         """
-        try:
-            payload = await self._get(PATH_EMS)
-        except FlexioResponseError:
-            payload = None
+        layout = await self._async_detect_layout()
+        await self._async_fetch_device_info()
+        return layout
 
-        if payload is not None and parse_payload(payload):
-            self.layout = Layout.AGGREGATE
-            return self.layout
+    async def _async_detect_layout(self) -> Layout:
+        """Work out which response layout this box uses."""
+        for path, layout in (
+            (PATH_MEASUREMENTS, Layout.MEASUREMENTS),
+            (PATH_LEGACY_EMS, Layout.LEGACY_EMS),
+        ):
+            payload = await self._try_get(path)
+            if payload is not None and parse_payload(payload):
+                LOGGER.debug("Detected %s layout at %s", layout, path)
+                self.layout = layout
+                return layout
 
-        # Fall back to probing individual endpoints.
+        # Last resort: probe one endpoint per documented field.
         discovered: dict[str, str] = {}
         for key, aliases in FIELD_ALIASES.items():
+            if key == KEY_TIMESTAMP:
+                continue
             for alias in aliases:
-                try:
-                    value = _coerce_value(await self._get(alias))
-                except FlexioResponseError:
-                    continue
-                if value is not None:
+                if _coerce_value(await self._try_get(alias)) is not None:
                     discovered[key] = alias
                     break
 
@@ -226,35 +279,72 @@ class FlexioClient:
         self.layout = Layout.PER_FIELD
         return self.layout
 
+    async def _async_fetch_device_info(self) -> None:
+        """Collect software version and converter type, if exposed."""
+        if isinstance(payload := await self._try_get(PATH_VERSION), dict):
+            if version := payload.get("version"):
+                self.version = str(version)
+        if isinstance(payload := await self._try_get(PATH_CONVERTER), dict):
+            if converter := payload.get("converter"):
+                self.converter = str(converter)
+
     async def async_get_data(self) -> dict[str, float]:
         """Return all currently available measurements."""
         if self.layout is None:
-            await self.async_detect_layout()
+            await self.async_setup()
 
-        if self.layout is Layout.AGGREGATE:
-            data = parse_payload(await self._get(PATH_EMS))
-            try:
-                data |= parse_payload(await self._get(PATH_LOAD_CONTROL))
-            except FlexioResponseError:
-                # Load control is optional; not every box exposes it.
-                LOGGER.debug("Load control endpoint unavailable")
-            if not data:
-                raise FlexioResponseError("Box returned no known measurements")
-            return data
+        if self.layout is Layout.PER_FIELD:
+            return await self._async_get_data_per_field()
 
+        if self.layout is Layout.MEASUREMENTS:
+            measurements_path = PATH_MEASUREMENTS
+            load_path = PATH_GENERIC_LOAD
+        else:
+            measurements_path = PATH_LEGACY_EMS
+            load_path = PATH_LEGACY_LOAD_CONTROL
+
+        data = parse_payload(await self._get(measurements_path))
+
+        # The generic load endpoint is optional and carries its own timestamp,
+        # which must not overwrite the measurement timestamp.
+        if (payload := await self._try_get(load_path)) is not None:
+            load_data = parse_payload(payload)
+            load_data.pop(KEY_TIMESTAMP, None)
+            data |= load_data
+        else:
+            LOGGER.debug("Generic load endpoint unavailable")
+
+        if not data:
+            raise FlexioResponseError("Box returned no known measurements")
+        return data
+
+    async def _async_get_data_per_field(self) -> dict[str, float]:
+        """Fetch every measurement from its own endpoint."""
         results = await asyncio.gather(
             *(self._get(path) for path in self._field_paths.values()),
             return_exceptions=True,
         )
-        data = {}
+        data: dict[str, float] = {}
         for key, result in zip(self._field_paths, results, strict=True):
             if isinstance(result, FlexioConnectionError):
                 raise result
             if isinstance(result, BaseException):
                 continue
-            value = _coerce_value(result)
-            if value is not None:
+            if (value := _coerce_value(result)) is not None:
                 data[key] = value
         if not data:
             raise FlexioResponseError("Box returned no known measurements")
         return data
+
+    async def async_set_generic_load_max_price(self, price: float) -> float | None:
+        """Set the generic load's maximum electricity price.
+
+        Returns the value the box confirms, or None when it confirms nothing.
+        Raises FlexioValueError when the box rejects the price.
+        """
+        payload = await self._request(
+            "POST", PATH_GENERIC_LOAD, json={FIELD_NEW_MAX_PRICE: price}
+        )
+        if isinstance(payload, dict):
+            return parse_payload(payload).get(KEY_GENERIC_LOAD_MAX_PRICE)
+        return None

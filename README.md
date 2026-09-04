@@ -8,17 +8,19 @@ no polling of anyone's servers — everything stays on your own network.
 
 ## Supported devices
 
-Any FlexiObox that serves the local API documented at
-`http://myio.local/api/docs`. The box must be on the same network as your
-Home Assistant instance.
+Any FlexiObox serving the *FlexiO Device API* on the local network, verified
+against firmware 1.148.3. The box must be on the same network as your Home
+Assistant instance; its on-device API documentation is at
+`http://myio.local/api/docs`.
 
 ## Features
 
 - **Local polling** every 15 seconds over HTTP, no authentication required.
-- **Automatic schema detection.** The published API docs disagree about the
-  response layout and the spelling of several fields, so the integration probes
-  the box on first setup and adapts to whichever layout and spelling your
-  firmware actually uses.
+- **Automatic schema detection.** LIFEPOWR's website documentation disagrees
+  with the on-device OpenAPI spec about endpoint paths, the write method, and
+  the spelling of several fields. The integration probes the box on first setup
+  and adapts to whichever layout and spelling your firmware actually uses.
+- **Writable price cap** for the generic load, when the box exposes it.
 - **Only real entities.** Measurements your box does not report are not created,
   rather than showing up as permanently unknown.
 - **Energy dashboard ready** via the included package (see below).
@@ -31,14 +33,21 @@ Home Assistant instance.
 | Household consumption | kW | Load power |
 | Grid power | kW | Bidirectional; sign convention depends on firmware |
 | Inverter power | kW | Bidirectional battery flow |
-| Inverter setpoint | kW | Commanded power |
+| Inverter setpoint | kW | Only on firmware that reports `powerSetpoint` |
 | Generic load available power | kW | Generic Load Controller |
 | Battery state of charge | % | |
 | Battery state of health | % | |
 | Battery voltage | V | Disabled by default |
 | Battery current | A | Disabled by default |
 | Electricity price | €/kWh | Current consumption price |
-| Generic load maximum price | €/kWh | Price threshold for the generic load |
+| Last measurement | timestamp | Diagnostic, disabled by default |
+| Converter | — | Diagnostic; the paired inverter, from `/api/info/converter` |
+
+One writable entity:
+
+| Entity | Unit | Notes |
+| --- | --- | --- |
+| Generic load maximum price | €/kWh | `number`; posts to `/api/ems/generic-load` |
 
 ## Installation
 
@@ -88,6 +97,19 @@ comments at the bottom of that file.
 > on a sunny moment; if your box is the other way round, swap the `max`/`min`
 > expressions in the template sensors.
 
+## Endpoints used
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /api/ems/measurements` | All live measurements |
+| `GET /api/ems/generic-load` | Generic load state and price cap |
+| `POST /api/ems/generic-load` | Sets the price cap (`{"newMaxPrice": …}`) |
+| `GET /api/info/version` | Firmware version, shown on the device page |
+| `GET /api/info/converter` | Paired converter, exposed as a sensor |
+
+Older firmware serving `/api/ems`, `/api/ems/load_control`, or one endpoint per
+measurement is detected automatically and handled read-only.
+
 ## Data updates
 
 The integration polls the box every 15 seconds. The API exposes filtered,
@@ -102,11 +124,12 @@ long-term statistics start from the moment you install the integration.
   same Tailscale/VPN subnet as the box).
 - **No authentication.** The API is unauthenticated by design; anyone on your
   LAN can read it. Segment your network accordingly.
-- **Read-only.** The API's single writable field
-  (`genericLoadMaximumElectricityPrice`) is exposed as a sensor, not a
-  `number` entity. Write support is deliberately held back until the PUT
-  payload format is confirmed against real firmware.
-- **No historical data**, and no per-phase or per-string detail.
+- **One writable value.** Only the generic load's price cap can be set; the
+  inverter itself cannot be commanded through this API. On firmware that does
+  not expose `/api/ems/measurements`, the `number` entity is not created at all,
+  because the write endpoint does not exist there either.
+- **No historical data**, and no per-phase or per-string detail. Long-term
+  statistics start when you install the integration.
 
 ## Troubleshooting
 
@@ -117,8 +140,8 @@ network; use the IP address.
 **"That host responded, but it does not look like a FlexiObox"** — something is
 answering on that address but serving no recognisable measurements. Open
 `http://<host>/api/docs` in a browser to confirm you have the right device, and
-open an issue with the output of `curl http://<host>/api/ems` so the field
-mapping can be extended.
+open an issue with the output of `curl http://<host>/api/ems/measurements` so
+the field mapping can be extended.
 
 **Entities are missing** — only measurements the box actually reports become
 entities. Download diagnostics from the integration page to see exactly which
@@ -134,8 +157,8 @@ the energy package, also remove `packages/lifepowr_energy.yaml` and restart.
 This integration is written to Home Assistant core standards
 (`quality_scale.yaml` tracks the remaining gaps) with the intention of
 submitting it to `home-assistant/core`. Field mappings from other firmware
-versions are especially welcome — attach a raw `curl http://myio.local/api/ems`
-response to an issue.
+versions are especially welcome — attach a raw
+`curl http://myio.local/api/ems/measurements` response to an issue.
 
 ## Disclaimer
 

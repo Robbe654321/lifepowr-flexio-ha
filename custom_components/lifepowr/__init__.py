@@ -11,7 +11,7 @@ from .api import FlexioClient, FlexioConnectionError, FlexioError
 from .const import DOMAIN
 from .coordinator import FlexioConfigEntry, FlexioCoordinator
 
-PLATFORMS: list[Platform] = [Platform.SENSOR]
+PLATFORMS: list[Platform] = [Platform.NUMBER, Platform.SENSOR]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: FlexioConfigEntry) -> bool:
@@ -19,7 +19,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: FlexioConfigEntry) -> bo
     client = FlexioClient(async_get_clientsession(hass), entry.data[CONF_HOST])
 
     try:
-        await client.async_detect_layout()
+        await client.async_setup()
     except FlexioConnectionError as err:
         raise ConfigEntryNotReady(
             translation_domain=DOMAIN,

@@ -28,6 +28,7 @@ class FlexioEntity(CoordinatorEntity[FlexioCoordinator]):
             manufacturer=MANUFACTURER,
             model=MODEL,
             name=DEFAULT_NAME,
+            sw_version=coordinator.client.version,
             configuration_url=coordinator.client.base_url.removesuffix("/api"),
         )
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -14,15 +15,17 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.const import (
     PERCENTAGE,
+    EntityCategory,
     UnitOfElectricCurrent,
     UnitOfElectricPotential,
     UnitOfPower,
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from homeassistant.helpers.typing import StateType
 
 from . import api
-from .coordinator import FlexioConfigEntry
+from .coordinator import FlexioConfigEntry, FlexioCoordinator
 from .entity import FlexioEntity
 
 PARALLEL_UPDATES = 0
@@ -30,11 +33,18 @@ PARALLEL_UPDATES = 0
 CURRENCY_PER_KWH = "€/kWh"
 
 
+def _as_timestamp(value: float) -> datetime | None:
+    """Convert the box's epoch into an aware datetime."""
+    if (seconds := api.normalise_timestamp(value)) is None:
+        return None
+    return datetime.fromtimestamp(seconds, tz=UTC)
+
+
 @dataclass(frozen=True, kw_only=True)
 class FlexioSensorEntityDescription(SensorEntityDescription):
     """Describe a FlexiO sensor."""
 
-    value_fn: Callable[[float], float] = lambda value: value
+    value_fn: Callable[[float], StateType | datetime] = lambda value: value
 
 
 POWER_SENSOR: dict[str, Any] = {
@@ -58,9 +68,7 @@ SENSORS: tuple[FlexioSensorEntityDescription, ...] = (
         key=api.KEY_INVERTER_POWER, translation_key="inverter_power", **POWER_SENSOR
     ),
     FlexioSensorEntityDescription(
-        key=api.KEY_POWER_SETPOINT,
-        translation_key="power_setpoint",
-        **POWER_SENSOR,
+        key=api.KEY_POWER_SETPOINT, translation_key="power_setpoint", **POWER_SENSOR
     ),
     FlexioSensorEntityDescription(
         key=api.KEY_GENERIC_LOAD_POWER,
@@ -108,12 +116,19 @@ SENSORS: tuple[FlexioSensorEntityDescription, ...] = (
         suggested_display_precision=4,
     ),
     FlexioSensorEntityDescription(
-        key=api.KEY_GENERIC_LOAD_MAX_PRICE,
-        translation_key="generic_load_max_price",
-        state_class=SensorStateClass.MEASUREMENT,
-        native_unit_of_measurement=CURRENCY_PER_KWH,
-        suggested_display_precision=4,
+        key=api.KEY_TIMESTAMP,
+        translation_key="last_measurement",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
+        value_fn=_as_timestamp,
     ),
+)
+
+CONVERTER_DESCRIPTION = SensorEntityDescription(
+    key="converter",
+    translation_key="converter",
+    entity_category=EntityCategory.DIAGNOSTIC,
 )
 
 
@@ -124,11 +139,14 @@ async def async_setup_entry(
 ) -> None:
     """Set up the FlexiO sensors."""
     coordinator = entry.runtime_data
-    async_add_entities(
+    entities: list[SensorEntity] = [
         FlexioSensor(coordinator, description)
         for description in SENSORS
         if description.key in coordinator.data
-    )
+    ]
+    if coordinator.client.converter is not None:
+        entities.append(FlexioConverterSensor(coordinator, CONVERTER_DESCRIPTION))
+    async_add_entities(entities)
 
 
 class FlexioSensor(FlexioEntity, SensorEntity):
@@ -137,8 +155,28 @@ class FlexioSensor(FlexioEntity, SensorEntity):
     entity_description: FlexioSensorEntityDescription
 
     @property
-    def native_value(self) -> float | None:
+    def native_value(self) -> StateType | datetime:
         """Return the current measurement."""
         if (value := self.coordinator.data.get(self.entity_description.key)) is None:
             return None
         return self.entity_description.value_fn(value)
+
+
+class FlexioConverterSensor(FlexioEntity, SensorEntity):
+    """The converter the FlexiObox is paired with."""
+
+    def __init__(
+        self, coordinator: FlexioCoordinator, description: SensorEntityDescription
+    ) -> None:
+        """Initialise the sensor."""
+        super().__init__(coordinator, description)
+        self._attr_native_value = coordinator.client.converter
+
+    @property
+    def available(self) -> bool:
+        """Return True while the coordinator is healthy.
+
+        The converter is read once at setup and does not appear in the polled
+        data, so the key-presence check of the base class does not apply.
+        """
+        return self.coordinator.last_update_success

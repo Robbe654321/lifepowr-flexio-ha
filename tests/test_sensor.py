@@ -34,7 +34,7 @@ async def test_sensors(
 async def test_missing_measurement_is_not_created(
     hass, mock_config_entry, mock_client
 ) -> None:
-    """A box that does not report load control gets no load-control entities."""
+    """A box that does not report generic load gets no generic-load entities."""
     data = dict(mock_client.async_get_data.return_value)
     del data["generic_load_max_price"]
     del data["generic_load_power"]
@@ -44,8 +44,28 @@ async def test_missing_measurement_is_not_created(
     assert await hass.config_entries.async_setup(mock_config_entry.entry_id)
     await hass.async_block_till_done()
 
-    assert hass.states.get("sensor.flexio_generic_load_maximum_price") is None
+    assert hass.states.get("sensor.flexio_generic_load_available_power") is None
+    assert hass.states.get("number.flexio_generic_load_maximum_price") is None
     assert hass.states.get("sensor.flexio_solar_production") is not None
+
+
+async def test_converter_sensor(hass, init_integration) -> None:
+    """The paired converter is exposed as a diagnostic sensor."""
+    state = hass.states.get("sensor.flexio_converter")
+    assert state is not None
+    assert state.state == "SolarEdge"
+
+
+async def test_converter_sensor_absent_when_unknown(
+    hass, mock_config_entry, mock_client
+) -> None:
+    """A box that does not report a converter gets no converter sensor."""
+    mock_client.converter = None
+    mock_config_entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert hass.states.get("sensor.flexio_converter") is None
 
 
 async def test_entities_become_unavailable(

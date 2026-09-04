@@ -33,6 +33,9 @@
     }
   },
   "entity": {
+    "number": {
+      "generic_load_max_price": { "name": "Maximumprijs generieke last" }
+    },
     "sensor": {
       "pv_power": { "name": "Zonneproductie" },
       "load_power": { "name": "Verbruik woning" },
@@ -45,7 +48,8 @@
       "battery_voltage": { "name": "Batterijspanning" },
       "battery_current": { "name": "Batterijstroom" },
       "electricity_price": { "name": "Elektriciteitsprijs" },
-      "generic_load_max_price": { "name": "Maximumprijs generieke last" }
+      "last_measurement": { "name": "Laatste meting" },
+      "converter": { "name": "Omvormer" }
     }
   },
   "exceptions": {
@@ -54,6 +58,12 @@
     },
     "invalid_response": {
       "message": "De FlexiObox gaf een onverwacht antwoord"
+    },
+    "invalid_price": {
+      "message": "De FlexiObox weigerde {price} als maximumprijs. Prijzen mogen niet negatief zijn."
+    },
+    "write_failed": {
+      "message": "Kon de nieuwe maximumprijs niet naar de FlexiObox op {host} schrijven"
     }
   }
 }
