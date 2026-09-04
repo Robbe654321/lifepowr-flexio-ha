@@ -6,6 +6,24 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Six cumulative kWh sensors, so the Energy dashboard can be configured
+  straight from the integration: solar production, household consumption, grid
+  import, grid export, battery charge and battery discharge energy. Each is a
+  trapezoidal Riemann sum over the box's live power, `total_increasing`, and
+  restored across restarts. The bidirectional grid and battery flows are split
+  into two positive-only directions so importing and exporting do not cancel
+  out, and gaps longer than five minutes are skipped rather than guessed at.
+
+### Removed
+
+- `packages/lifepowr_energy.yaml`. The integration now creates those totals
+  itself, with the same entity IDs and no YAML, `configuration.yaml` edit or
+  restart. Anyone using the package should delete it and remove its leftover
+  entities, otherwise the built-in sensors fall back to `…_energy_2` entity IDs
+  because the old ones are still registered.
+
 ## [0.1.0] — 2026-09-04
 
 First release. Verified against firmware 1.148.10 driving a Goodwe

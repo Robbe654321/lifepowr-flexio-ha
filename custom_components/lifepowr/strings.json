@@ -48,6 +48,12 @@
       "battery_voltage": { "name": "Battery voltage" },
       "battery_current": { "name": "Battery current" },
       "electricity_price": { "name": "Electricity price" },
+      "pv_energy": { "name": "Solar production energy" },
+      "load_energy": { "name": "Household consumption energy" },
+      "grid_import_energy": { "name": "Grid import energy" },
+      "grid_export_energy": { "name": "Grid export energy" },
+      "battery_charge_energy": { "name": "Battery charge energy" },
+      "battery_discharge_energy": { "name": "Battery discharge energy" },
       "last_measurement": { "name": "Last measurement" },
       "converter": { "name": "Converter" }
     }

@@ -17,6 +17,10 @@ pytest_plugins = "pytest_homeassistant_custom_component"
 
 HOST = "myio.local"
 
+#: Fixed so the entity unique IDs, which are derived from it, stay stable
+#: across runs and can be snapshotted.
+ENTRY_ID = "01JQ8Z0000000000000000FLEX"
+
 #: A real sample from a FlexiObox on firmware 1.148.10 (Goodwe GW12K-ET-20),
 #: mapped onto the integration's internal keys. The box was importing 5341 W
 #: while charging the battery, so grid, load and inverter are all negative in
@@ -44,12 +48,23 @@ def auto_enable_custom_integrations(enable_custom_integrations):
 
 
 @pytest.fixture
+def entity_registry_enabled_by_default() -> Generator[None]:
+    """Register even the entities that are disabled by default."""
+    with patch(
+        "homeassistant.helpers.entity.Entity.entity_registry_enabled_default",
+        return_value=True,
+    ):
+        yield
+
+
+@pytest.fixture
 def mock_config_entry() -> MockConfigEntry:
     """Return a mocked config entry."""
     return MockConfigEntry(
         domain=DOMAIN,
         title="FlexiO",
         data={CONF_HOST: HOST},
+        entry_id=ENTRY_ID,
     )
 
 
