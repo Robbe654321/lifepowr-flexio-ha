@@ -33,6 +33,21 @@ jobs:
       - uses: astral-sh/ruff-action@v3
         with:
           args: check --output-format=github
+      - uses: astral-sh/ruff-action@v3
+        with:
+          args: format --check --diff
+
+  diagram:
+    name: diagram is up to date
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: python3 scripts/make_diagram.py
+      - name: Fail if the committed SVGs differ from the generator
+        run: git diff --exit-code -- docs/
 
   tests:
     name: pytest

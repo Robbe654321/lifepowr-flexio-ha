@@ -1,0 +1,36 @@
+name: Feature request
+description: Suggest something the integration should do
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The FlexiO API has exactly five operations and one writable value, so
+        the integration cannot expose anything the box does not. See
+        [docs/api-notes.md](../blob/main/docs/api-notes.md) for the complete
+        surface.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: The situation, not the solution.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What should happen instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: api
+    attributes:
+      label: Which endpoint would provide this?
+      description: >
+        If the data is not in `/api/ems/measurements` or
+        `/api/ems/generic-load`, paste the endpoint that has it.
+    validations:
+      required: false

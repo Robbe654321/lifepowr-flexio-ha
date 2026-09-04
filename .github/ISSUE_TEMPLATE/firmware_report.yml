@@ -1,0 +1,71 @@
+name: Firmware report
+description: Report what a FlexiObox on different firmware returns
+title: "Firmware report: "
+labels: ["firmware"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This is the most useful thing you can contribute. The integration was
+        written against one box on firmware 1.148.10; every other firmware is
+        an unknown, and the vendor documentation has already proven wrong six
+        times.
+
+        Nothing here is written to your box.
+
+  - type: textarea
+    id: check_box
+    attributes:
+      label: Output of scripts/check_box.py
+      description: >
+        `python3 scripts/check_box.py` from the repository root. Standard
+        library only — nothing to install.
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: raw
+    attributes:
+      label: Raw measurements
+      description: "`curl -s http://myio.local/api/ems/measurements`"
+      render: json
+    validations:
+      required: true
+
+  - type: textarea
+    id: raw_load
+    attributes:
+      label: Raw generic load
+      description: "`curl -s http://myio.local/api/ems/generic-load`"
+      render: json
+    validations:
+      required: false
+
+  - type: input
+    id: firmware
+    attributes:
+      label: Firmware version
+      placeholder: "1.148.10"
+    validations:
+      required: true
+
+  - type: input
+    id: converter
+    attributes:
+      label: Paired converter
+      placeholder: "Goodwe GW12K-ET-20"
+    validations:
+      required: true
+
+  - type: textarea
+    id: reality
+    attributes:
+      label: What the box was actually doing
+      description: >
+        Optional but valuable: what your meter and battery were doing at that
+        moment. Importing or exporting? Battery charging or discharging?
+        Roughly how many watts? This is what lets the sign convention be
+        confirmed rather than assumed.
+    validations:
+      required: false

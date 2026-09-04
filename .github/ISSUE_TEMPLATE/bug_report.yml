@@ -1,0 +1,85 @@
+name: Bug report
+description: Something does not work as described
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing: run `python3 scripts/check_box.py` from the repository
+        root. Its output answers most of what is asked below, and often the
+        question itself.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What did you expect, and what did you get instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: check_box
+    attributes:
+      label: Output of scripts/check_box.py
+      description: >
+        Run `python3 scripts/check_box.py` (or with your box's IP address) and
+        paste the whole output. Nothing is written to the box.
+      render: text
+    validations:
+      required: false
+
+  - type: input
+    id: firmware
+    attributes:
+      label: FlexiObox firmware
+      description: From the device page in Home Assistant, or `/api/info/version`.
+      placeholder: "1.148.10"
+    validations:
+      required: true
+
+  - type: input
+    id: converter
+    attributes:
+      label: Paired converter
+      description: The Converter sensor, or `/api/info/converter`.
+      placeholder: "Goodwe GW12K-ET-20"
+    validations:
+      required: false
+
+  - type: input
+    id: ha_version
+    attributes:
+      label: Home Assistant version
+      placeholder: "2026.9.0"
+    validations:
+      required: true
+
+  - type: input
+    id: integration_version
+    attributes:
+      label: Integration version
+      placeholder: "0.1.0"
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log output
+      description: >
+        Add `logger:` with `custom_components.lifepowr: debug` to
+        `configuration.yaml`, restart, reproduce, then paste the log lines.
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: >
+        Settings → Devices & services → LIFEPOWR FlexiO → three dots →
+        Download diagnostics. Nothing in it identifies you.
+      render: json
+    validations:
+      required: false

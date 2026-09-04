@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: FlexiObox API documentation
+    url: https://docs.lifepowr.io/user/v1/flexio-api
+    about: The vendor's documentation. Note that it disagrees with the hardware on six points — see docs/api-notes.md.
+  - name: LIFEPOWR support
+    url: https://flexio.lifepowr.io/support/help-center
+    about: For problems with the FlexiObox itself. This project is not affiliated with LIFEPOWR.
+  - name: Home Assistant community
+    url: https://community.home-assistant.io/
+    about: For questions about Home Assistant, the Energy dashboard, or automations.

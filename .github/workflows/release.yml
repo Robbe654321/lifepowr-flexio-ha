@@ -1,0 +1,37 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Publish release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the tag matches the manifest version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          manifest=$(python3 -c "import json;print(json.load(open('custom_components/lifepowr/manifest.json'))['version'])")
+          if [ "$tag" != "$manifest" ]; then
+            echo "Tag $tag does not match manifest version $manifest" >&2
+            exit 1
+          fi
+
+      - name: Build the HACS archive
+        run: |
+          cd custom_components/lifepowr
+          zip -r ../../lifepowr.zip . -x "*__pycache__*"
+
+      - name: Publish
+        uses: softprops/action-gh-release@v2
+        with:
+          files: lifepowr.zip
+          generate_release_notes: true
+          body_path: ${{ github.workspace }}/.github/release-preamble.md
