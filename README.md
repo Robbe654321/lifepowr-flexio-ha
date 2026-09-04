@@ -17,7 +17,7 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/architecture-dark.svg">
-    <img alt="The FlexiObox serves a local API; the integration polls it every 15 seconds, normalises units and signs, and exposes 12 sensors and one number in Home Assistant." src="docs/architecture-light.svg" width="100%">
+    <img alt="The FlexiObox serves a local API; the integration polls it every 15 seconds, normalises units and signs, and exposes 12 sensors, six kWh energy totals and one number in Home Assistant." src="docs/architecture-light.svg" width="100%">
   </picture>
 </p>
 
@@ -88,6 +88,18 @@ reports — nothing shows up permanently unknown.
 | Converter | — | Diagnostic; the paired inverter |
 | **Generic load maximum price** | €/kWh | **Writable** `number` |
 
+Plus six cumulative totals for the [Energy dashboard](#energy-dashboard),
+integrated from those power readings:
+
+| Entity | Unit | Integrated from |
+| --- | --- | --- |
+| Solar production energy | kWh | Solar production |
+| Household consumption energy | kWh | Household consumption |
+| Grid import energy | kWh | Grid power, while positive |
+| Grid export energy | kWh | Grid power, while negative |
+| Battery charge energy | kWh | Inverter power, while negative |
+| Battery discharge energy | kWh | Inverter power, while positive |
+
 ## Units and sign convention
 
 Two things the vendor documentation gets wrong, both confirmed against real
@@ -150,19 +162,16 @@ variants.
 
 ## Energy dashboard
 
-The box reports live power only, so cumulative energy has to be derived.
-[`packages/lifepowr_energy.yaml`](packages/lifepowr_energy.yaml) splits the
-bidirectional grid and battery power into directions and integrates each into a
-`total_increasing` kWh sensor.
+The Energy dashboard only lists sensors that report cumulative energy in kWh,
+so the box's instantaneous watts cannot be selected there directly. The
+integration therefore integrates them for you: every 15 seconds each power
+reading is added to a `total_increasing` kWh total, with the bidirectional grid
+and battery flows split into two positive-only directions each so importing and
+exporting never cancel out. The totals are restored across restarts, and gaps
+longer than five minutes are skipped rather than guessed at.
 
-Copy it into `config/packages/`, add this to `configuration.yaml`:
-
-```yaml
-homeassistant:
-  packages: !include_dir_named packages
-```
-
-restart, then map the sensors in **Settings → Dashboards → Energy**:
+No YAML, no template sensors, no restart — the six entities exist as soon as
+the integration is set up. Map them in **Settings → Dashboards → Energy**:
 
 | Energy dashboard slot | Entity |
 | --- | --- |
@@ -173,10 +182,21 @@ restart, then map the sensors in **Settings → Dashboards → Energy**:
 | Battery: energy out | `sensor.flexio_battery_discharge_energy` |
 
 Set `sensor.flexio_electricity_price` as the grid consumption source's *"use an
-entity with current price"* option for live cost tracking.
+entity with current price"* option for live cost tracking. Individual devices
+can use `sensor.flexio_household_consumption_energy`.
 
-The package reads the integration's already-normalised entities, so nothing in
-it needs adjusting.
+Totals start at zero when the integration is installed: the API exposes live
+values only, so there is no history to backfill. Expect the dashboard to stay
+empty until the next hour rolls over, since long-term statistics are compiled
+hourly.
+
+> **Upgrading from `packages/lifepowr_energy.yaml`?** That package is gone —
+> these sensors replace it. Delete the file from `config/packages/` and restart,
+> then remove its leftover entities under **Settings → Devices & services →
+> Entities** (they are shown as unavailable). Otherwise the built-in sensors
+> claim `…_energy_2` entity IDs, because the old ones are still taken. Point
+> the Energy dashboard at the new entities afterwards; their history starts
+> fresh.
 
 ## Endpoints used
 
@@ -253,8 +273,9 @@ version — the unit would then need to be detected rather than assumed.
 
 ## Removal
 
-Delete the integration from **Settings → Devices & services**. If you installed
-the energy package, also remove `packages/lifepowr_energy.yaml` and restart.
+Delete the integration from **Settings → Devices & services**. Its energy
+totals go with it; the Energy dashboard keeps the statistics already recorded
+until you remove those sources from its configuration.
 
 ## Contributing
 

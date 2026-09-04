@@ -48,6 +48,12 @@
       "battery_voltage": { "name": "Batterijspanning" },
       "battery_current": { "name": "Batterijstroom" },
       "electricity_price": { "name": "Elektriciteitsprijs" },
+      "pv_energy": { "name": "Zonneproductie energie" },
+      "load_energy": { "name": "Verbruik woning energie" },
+      "grid_import_energy": { "name": "Netimport energie" },
+      "grid_export_energy": { "name": "Netexport energie" },
+      "battery_charge_energy": { "name": "Batterij laadenergie" },
+      "battery_discharge_energy": { "name": "Batterij ontlaadenergie" },
       "last_measurement": { "name": "Laatste meting" },
       "converter": { "name": "Omvormer" }
     }

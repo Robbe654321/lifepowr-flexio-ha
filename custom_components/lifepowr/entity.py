@@ -33,10 +33,15 @@ class FlexioEntity(CoordinatorEntity[FlexioCoordinator]):
         )
 
     @property
+    def _data_key(self) -> str:
+        """Return the coordinator key this entity depends on."""
+        return self.entity_description.key
+
+    @property
     def available(self) -> bool:
         """Return True when the box last reported this measurement."""
         return (
             super().available
             and self.coordinator.data is not None
-            and self.entity_description.key in self.coordinator.data
+            and self._data_key in self.coordinator.data
         )

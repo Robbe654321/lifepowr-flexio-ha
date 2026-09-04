@@ -26,6 +26,7 @@ from homeassistant.helpers.typing import StateType
 
 from . import api
 from .coordinator import FlexioConfigEntry, FlexioCoordinator
+from .energy import ENERGY_SENSORS, FlexioEnergySensor
 from .entity import FlexioEntity
 
 PARALLEL_UPDATES = 0
@@ -160,6 +161,13 @@ async def async_setup_entry(
         FlexioSensor(coordinator, description)
         for description in SENSORS
         if description.key in coordinator.data
+    ]
+    # The box reports power only, so the Energy dashboard's kWh totals are
+    # integrated here rather than left to the user's own template sensors.
+    entities += [
+        FlexioEnergySensor(coordinator, description)
+        for description in ENERGY_SENSORS
+        if description.source_key in coordinator.data
     ]
     if coordinator.client.converter is not None:
         entities.append(FlexioConverterSensor(coordinator, CONVERTER_DESCRIPTION))

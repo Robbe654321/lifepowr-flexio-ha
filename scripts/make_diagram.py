@@ -83,11 +83,11 @@ COLUMNS = [
             ("muted", "solar · load · grid · battery"),
             ("muted", "price · SoC · SoH · V · A"),
             ("gap", ""),
+            ("text", "6 kWh totals"),
+            ("muted", "integrated from the watts"),
+            ("gap", ""),
             ("text", "1 number"),
             ("muted", "generic load price cap"),
-            ("gap", ""),
-            ("muted", "missing fields make"),
-            ("muted", "no entity at all"),
         ],
     },
 ]
@@ -178,22 +178,22 @@ def build(c: dict[str, str]) -> str:
         f'setting the price cap posts straight back to the box</text>'
     )
 
-    # Bottom band: the energy package.
+    # Bottom band: the built-in energy totals.
     p.append(
         f'<rect x="24" y="{BAND_Y}" width="{W - 48}" height="{BAND_H}" rx="10" '
         f'fill="{c["panel"]}" stroke="{c["border"]}" stroke-dasharray="5 4"/>'
     )
     p.append(
         f'<text x="44" y="{BAND_Y + 27}" font-family="{FONT}" font-size="13" '
-        f'font-weight="600" fill="{c["text"]}">Optional: '
+        f'font-weight="600" fill="{c["text"]}">Built in: '
         f'<tspan font-family="{MONO}" font-size="11.5" fill="{c["mono"]}">'
-        f'packages/lifepowr_energy.yaml</tspan></text>'
+        f'device_class: energy</tspan> totals for the Energy dashboard</text>'
     )
     p.append(
         f'<text x="44" y="{BAND_Y + 48}" font-family="{FONT}" font-size="12" '
-        f'fill="{c["muted"]}">Splits grid and battery into directions and '
-        f'integrates watts into kWh — six totals the Energy dashboard '
-        f'accepts directly.</text>'
+        f'fill="{c["muted"]}">Grid and battery are split into directions and '
+        f'the watts integrated into kWh — six totals the Energy dashboard '
+        f'lists directly, no YAML.</text>'
     )
 
     p.append(
