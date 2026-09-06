@@ -38,10 +38,16 @@
         "title": "Polling",
         "description": "How often to read the FlexiObox. It answers in milliseconds and is on your own network, so a few seconds is fine. Faster polling means more states recorded in your database.",
         "data": {
-          "scan_interval": "Poll interval"
+          "scan_interval": "Poll interval",
+          "solar_forecast": "Learn the roof and forecast production",
+          "solar_source": "Production history to learn from",
+          "solar_history_days": "History to read"
         },
         "data_description": {
-          "scan_interval": "Seconds between readings. Default 10, minimum 2. The FlexiO app itself refreshes every few seconds."
+          "scan_interval": "Seconds between readings. Default 10, minimum 2. The FlexiO app itself refreshes every few seconds.",
+          "solar_forecast": "Works out the tilt, compass bearing and peak power of every plane of panels from what your installation has already produced, then forecasts the coming days from the weather. Needs the recorder, and fetches irradiance from Open-Meteo.",
+          "solar_source": "Leave empty to use the FlexiObox's own solar production sensor. Point this at another sensor if an older inverter integration holds more history.",
+          "solar_history_days": "A full year covers every angle the sun reaches here, which is what pins the tilt down. More is better and only makes the nightly fit a little slower."
         }
       }
     }
@@ -53,26 +59,84 @@
       }
     },
     "sensor": {
-      "pv_power": { "name": "Solar production" },
-      "load_power": { "name": "Household consumption" },
-      "grid_power": { "name": "Grid power" },
-      "battery_power": { "name": "Battery power" },
-      "inverter_power": { "name": "Inverter power (total AC)" },
-      "power_setpoint": { "name": "Inverter setpoint" },
-      "generic_load_power": { "name": "Generic load available power" },
-      "battery_soc": { "name": "Battery state of charge" },
-      "battery_soh": { "name": "Battery state of health" },
-      "battery_voltage": { "name": "Battery voltage" },
-      "battery_current": { "name": "Battery current" },
-      "electricity_price": { "name": "Electricity price" },
-      "pv_energy": { "name": "Solar production energy" },
-      "load_energy": { "name": "Household consumption energy" },
-      "grid_import_energy": { "name": "Grid import energy" },
-      "grid_export_energy": { "name": "Grid export energy" },
-      "battery_charge_energy": { "name": "Battery charge energy" },
-      "battery_discharge_energy": { "name": "Battery discharge energy" },
-      "last_measurement": { "name": "Last measurement" },
-      "converter": { "name": "Converter" }
+      "pv_power": {
+        "name": "Solar production"
+      },
+      "load_power": {
+        "name": "Household consumption"
+      },
+      "grid_power": {
+        "name": "Grid power"
+      },
+      "battery_power": {
+        "name": "Battery power"
+      },
+      "inverter_power": {
+        "name": "Inverter power (total AC)"
+      },
+      "power_setpoint": {
+        "name": "Inverter setpoint"
+      },
+      "generic_load_power": {
+        "name": "Generic load available power"
+      },
+      "battery_soc": {
+        "name": "Battery state of charge"
+      },
+      "battery_soh": {
+        "name": "Battery state of health"
+      },
+      "battery_voltage": {
+        "name": "Battery voltage"
+      },
+      "battery_current": {
+        "name": "Battery current"
+      },
+      "electricity_price": {
+        "name": "Electricity price"
+      },
+      "pv_energy": {
+        "name": "Solar production energy"
+      },
+      "load_energy": {
+        "name": "Household consumption energy"
+      },
+      "grid_import_energy": {
+        "name": "Grid import energy"
+      },
+      "grid_export_energy": {
+        "name": "Grid export energy"
+      },
+      "battery_charge_energy": {
+        "name": "Battery charge energy"
+      },
+      "battery_discharge_energy": {
+        "name": "Battery discharge energy"
+      },
+      "last_measurement": {
+        "name": "Last measurement"
+      },
+      "converter": {
+        "name": "Converter"
+      },
+      "solar_forecast_now": {
+        "name": "Solar forecast now"
+      },
+      "solar_forecast_today": {
+        "name": "Solar forecast today"
+      },
+      "solar_forecast_remaining_today": {
+        "name": "Solar forecast remaining today"
+      },
+      "solar_forecast_tomorrow": {
+        "name": "Solar forecast tomorrow"
+      },
+      "solar_forecast_peak_today": {
+        "name": "Solar forecast peak today"
+      },
+      "solar_model": {
+        "name": "Learned solar capacity"
+      }
     }
   },
   "exceptions": {
@@ -87,6 +151,15 @@
     },
     "write_failed": {
       "message": "Failed to write the new maximum price to the FlexiObox at {host}"
+    },
+    "solar_forecast_disabled": {
+      "message": "The solar forecast is switched off. Turn it on in the integration's options first."
+    }
+  },
+  "services": {
+    "learn_solar_model": {
+      "name": "Learn the solar model",
+      "description": "Re-reads the production history and works out afresh how the panels are laid out. Runs by itself every night; use this after adding panels, or to see the result without waiting."
     }
   }
 }

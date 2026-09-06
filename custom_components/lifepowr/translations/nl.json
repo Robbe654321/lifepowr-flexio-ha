@@ -38,10 +38,16 @@
         "title": "Polling",
         "description": "Hoe vaak de FlexiObox uitgelezen wordt. Hij antwoordt in milliseconden en staat op je eigen netwerk, dus een paar seconden kan gerust. Sneller pollen betekent wel meer states in je database.",
         "data": {
-          "scan_interval": "Poll-interval"
+          "scan_interval": "Poll-interval",
+          "solar_forecast": "Leer het dak en voorspel de opbrengst",
+          "solar_source": "Productiegeschiedenis om uit te leren",
+          "solar_history_days": "Geschiedenis om te lezen"
         },
         "data_description": {
-          "scan_interval": "Seconden tussen metingen. Standaard 10, minimum 2. De FlexiO-app zelf ververst ook om de paar seconden."
+          "scan_interval": "Seconden tussen metingen. Standaard 10, minimum 2. De FlexiO-app zelf ververst ook om de paar seconden.",
+          "solar_forecast": "Leidt de helling, de windrichting en het piekvermogen van elk vlak panelen af uit wat je installatie al opgebracht heeft, en voorspelt daarmee de komende dagen op basis van het weer. Heeft de recorder nodig en haalt de instraling bij Open-Meteo.",
+          "solar_source": "Laat leeg om de zonneproductiesensor van de FlexiObox zelf te gebruiken. Wijs een andere sensor aan als een oudere omvormerintegratie meer geschiedenis heeft.",
+          "solar_history_days": "Een vol jaar bevat elke stand die de zon hier bereikt, en dat is wat de helling vastlegt. Meer is beter en maakt de nachtelijke berekening alleen wat trager."
         }
       }
     }
@@ -53,26 +59,84 @@
       }
     },
     "sensor": {
-      "pv_power": { "name": "Zonneproductie" },
-      "load_power": { "name": "Verbruik woning" },
-      "grid_power": { "name": "Netvermogen" },
-      "battery_power": { "name": "Batterijvermogen" },
-      "inverter_power": { "name": "Omvormervermogen (totaal AC)" },
-      "power_setpoint": { "name": "Setpoint omvormer" },
-      "generic_load_power": { "name": "Beschikbaar vermogen generieke last" },
-      "battery_soc": { "name": "Laadtoestand batterij" },
-      "battery_soh": { "name": "Gezondheid batterij" },
-      "battery_voltage": { "name": "Batterijspanning" },
-      "battery_current": { "name": "Batterijstroom" },
-      "electricity_price": { "name": "Elektriciteitsprijs" },
-      "pv_energy": { "name": "Zonneproductie energie" },
-      "load_energy": { "name": "Verbruik woning energie" },
-      "grid_import_energy": { "name": "Netimport energie" },
-      "grid_export_energy": { "name": "Netexport energie" },
-      "battery_charge_energy": { "name": "Batterij laadenergie" },
-      "battery_discharge_energy": { "name": "Batterij ontlaadenergie" },
-      "last_measurement": { "name": "Laatste meting" },
-      "converter": { "name": "Omvormer" }
+      "pv_power": {
+        "name": "Zonneproductie"
+      },
+      "load_power": {
+        "name": "Verbruik woning"
+      },
+      "grid_power": {
+        "name": "Netvermogen"
+      },
+      "battery_power": {
+        "name": "Batterijvermogen"
+      },
+      "inverter_power": {
+        "name": "Omvormervermogen (totaal AC)"
+      },
+      "power_setpoint": {
+        "name": "Setpoint omvormer"
+      },
+      "generic_load_power": {
+        "name": "Beschikbaar vermogen generieke last"
+      },
+      "battery_soc": {
+        "name": "Laadtoestand batterij"
+      },
+      "battery_soh": {
+        "name": "Gezondheid batterij"
+      },
+      "battery_voltage": {
+        "name": "Batterijspanning"
+      },
+      "battery_current": {
+        "name": "Batterijstroom"
+      },
+      "electricity_price": {
+        "name": "Elektriciteitsprijs"
+      },
+      "pv_energy": {
+        "name": "Zonneproductie energie"
+      },
+      "load_energy": {
+        "name": "Verbruik woning energie"
+      },
+      "grid_import_energy": {
+        "name": "Netimport energie"
+      },
+      "grid_export_energy": {
+        "name": "Netexport energie"
+      },
+      "battery_charge_energy": {
+        "name": "Batterij laadenergie"
+      },
+      "battery_discharge_energy": {
+        "name": "Batterij ontlaadenergie"
+      },
+      "last_measurement": {
+        "name": "Laatste meting"
+      },
+      "converter": {
+        "name": "Omvormer"
+      },
+      "solar_forecast_now": {
+        "name": "Zonvoorspelling nu"
+      },
+      "solar_forecast_today": {
+        "name": "Zonvoorspelling vandaag"
+      },
+      "solar_forecast_remaining_today": {
+        "name": "Zonvoorspelling rest van vandaag"
+      },
+      "solar_forecast_tomorrow": {
+        "name": "Zonvoorspelling morgen"
+      },
+      "solar_forecast_peak_today": {
+        "name": "Piek zonvoorspelling vandaag"
+      },
+      "solar_model": {
+        "name": "Geleerd zonnevermogen"
+      }
     }
   },
   "exceptions": {
@@ -87,6 +151,15 @@
     },
     "write_failed": {
       "message": "Kon de nieuwe maximumprijs niet naar de FlexiObox op {host} schrijven"
+    },
+    "solar_forecast_disabled": {
+      "message": "De zonvoorspelling staat uit. Zet ze eerst aan bij de opties van de integratie."
+    }
+  },
+  "services": {
+    "learn_solar_model": {
+      "name": "Leer het zonnemodel",
+      "description": "Leest de productiegeschiedenis opnieuw en berekent van voren af aan hoe de panelen liggen. Gebeurt vanzelf elke nacht; gebruik dit na het bijplaatsen van panelen, of om het resultaat te zien zonder te wachten."
     }
   }
 }

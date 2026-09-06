@@ -13,7 +13,7 @@ async def async_get_config_entry_diagnostics(
     hass: HomeAssistant, entry: FlexioConfigEntry
 ) -> dict[str, Any]:
     """Return diagnostics for a config entry."""
-    coordinator = entry.runtime_data
+    coordinator = entry.runtime_data.coordinator
     return {
         "layout": coordinator.client.layout,
         "version": coordinator.client.version,

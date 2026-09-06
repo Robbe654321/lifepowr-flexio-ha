@@ -1,6 +1,7 @@
 {
   "domain": "lifepowr",
   "name": "LIFEPOWR FlexiO",
+  "after_dependencies": ["recorder"],
   "codeowners": ["@Robbe654321"],
   "config_flow": true,
   "documentation": "https://github.com/Robbe654321/lifepowr-flexio-ha",

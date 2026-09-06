@@ -10,7 +10,12 @@ from homeassistant.data_entry_flow import FlowResultType
 import pytest
 
 from custom_components.lifepowr.api import FlexioConnectionError, FlexioResponseError
-from custom_components.lifepowr.const import DOMAIN
+from custom_components.lifepowr.const import (
+    CONF_SOLAR_FORECAST,
+    CONF_SOLAR_HISTORY_DAYS,
+    DEFAULT_SOLAR_HISTORY_DAYS,
+    DOMAIN,
+)
 
 from .conftest import HOST
 
@@ -103,7 +108,8 @@ async def test_options_flow_changes_poll_interval(
     hass, mock_client, init_integration
 ) -> None:
     """The poll interval is configurable and takes effect on reload."""
-    assert init_integration.runtime_data.update_interval == timedelta(seconds=10)
+    coordinator = init_integration.runtime_data.coordinator
+    assert coordinator.update_interval == timedelta(seconds=10)
 
     result = await hass.config_entries.options.async_init(init_integration.entry_id)
     assert result["type"] is FlowResultType.FORM
@@ -115,5 +121,12 @@ async def test_options_flow_changes_poll_interval(
     await hass.async_block_till_done()
 
     assert result["type"] is FlowResultType.CREATE_ENTRY
-    assert init_integration.options == {CONF_SCAN_INTERVAL: 3}
-    assert init_integration.runtime_data.update_interval == timedelta(seconds=3)
+    # The solar options keep their defaults when the form leaves them alone.
+    assert init_integration.options == {
+        CONF_SCAN_INTERVAL: 3,
+        CONF_SOLAR_FORECAST: False,
+        CONF_SOLAR_HISTORY_DAYS: DEFAULT_SOLAR_HISTORY_DAYS,
+    }
+    assert init_integration.runtime_data.coordinator.update_interval == timedelta(
+        seconds=3
+    )

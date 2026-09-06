@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import timedelta
+from typing import TYPE_CHECKING
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_SCAN_INTERVAL
@@ -12,7 +14,23 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from .api import FlexioClient, FlexioConnectionError, FlexioError
 from .const import DEFAULT_SCAN_INTERVAL, DOMAIN, LOGGER
 
-type FlexioConfigEntry = ConfigEntry[FlexioCoordinator]
+if TYPE_CHECKING:
+    from .solar_forecast import SolarForecastCoordinator
+
+type FlexioConfigEntry = ConfigEntry[FlexioRuntimeData]
+
+
+@dataclass
+class FlexioRuntimeData:
+    """Everything one config entry keeps alive.
+
+    The box's own poller and the solar forecast run on different clocks -- one
+    every few seconds off the local network, the other every half hour off a
+    weather service -- so they are separate coordinators sharing one device.
+    """
+
+    coordinator: FlexioCoordinator
+    solar: SolarForecastCoordinator | None = None
 
 
 class FlexioCoordinator(DataUpdateCoordinator[dict[str, float]]):

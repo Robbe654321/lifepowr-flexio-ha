@@ -41,7 +41,7 @@ async def async_setup_entry(
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up the FlexiO number entities."""
-    coordinator = entry.runtime_data
+    coordinator = entry.runtime_data.coordinator
     if (
         coordinator.client.supports_write
         and MAX_PRICE_DESCRIPTION.key in coordinator.data
