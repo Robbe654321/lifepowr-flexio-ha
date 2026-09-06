@@ -1,8 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="940" height="512" viewBox="0 0 940 512" role="img" aria-label="Data flow from the FlexiObox through the integration into Home Assistant">
-<rect width="940" height="512" fill="#ffffff"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="940" height="588" viewBox="0 0 940 588" role="img" aria-label="Data flow from the FlexiObox through the integration into Home Assistant">
+<rect width="940" height="588" fill="#ffffff"/>
 <text x="24" y="40" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="19" font-weight="600" fill="#1f2328">How it fits together</text>
-<text x="24" y="64" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" fill="#59636e">Everything stays on your network. No cloud, no account, no authentication.</text>
-<rect x="24" y="92" width="244" height="268" rx="10" fill="#f6f8fa" stroke="#d1d9e0"/>
+<text x="24" y="64" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" fill="#59636e">The box stays on your network. No account, no authentication. Only the optional solar forecast reaches out, for the weather.</text>
+<rect x="24" y="92" width="244" height="344" rx="10" fill="#f6f8fa" stroke="#d1d9e0"/>
 <text x="42" y="124" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="15" font-weight="600" fill="#1f2328">FlexiObox</text>
 <text x="42" y="144" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11.5" fill="#59636e">myio.local · local network only</text>
 <line x1="42" y1="158" x2="250" y2="158" stroke="#d1d9e0"/>
@@ -12,7 +12,7 @@
 <text x="42" y="242" font-family="ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace" font-size="11" font-weight="400" fill="#0550ae">GET  /api/info/converter</text>
 <text x="42" y="272" font-family="ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace" font-size="11" font-weight="400" fill="#9a6700">POST /api/ems/generic-load</text>
 <text x="42" y="292" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#59636e">the only writable value</text>
-<rect x="348" y="92" width="244" height="268" rx="10" fill="#f6f8fa" stroke="#d1d9e0"/>
+<rect x="348" y="92" width="244" height="344" rx="10" fill="#f6f8fa" stroke="#d1d9e0"/>
 <text x="366" y="124" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="15" font-weight="600" fill="#1f2328">lifepowr</text>
 <text x="366" y="144" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11.5" fill="#59636e">the integration</text>
 <line x1="366" y1="158" x2="574" y2="158" stroke="#d1d9e0"/>
@@ -24,7 +24,10 @@
 <text x="366" y="302" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="600" fill="#1a7f37">Flips grid + load sign</text>
 <text x="366" y="322" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="600" fill="#1a7f37">Derives battery = inv − PV</text>
 <text x="366" y="352" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#59636e">polls every 10 s, tunable</text>
-<rect x="672" y="92" width="244" height="268" rx="10" fill="#f6f8fa" stroke="#d1d9e0"/>
+<text x="366" y="382" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#1f2328">Learns the roof overnight</text>
+<text x="366" y="402" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#1f2328">from recorder statistics</text>
+<text x="366" y="422" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#59636e">tilt · bearing · kW · skyline</text>
+<rect x="672" y="92" width="244" height="344" rx="10" fill="#f6f8fa" stroke="#d1d9e0"/>
 <text x="690" y="124" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="15" font-weight="600" fill="#1f2328">Home Assistant</text>
 <text x="690" y="144" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11.5" fill="#59636e">one device, real entities</text>
 <line x1="690" y1="158" x2="898" y2="158" stroke="#d1d9e0"/>
@@ -36,12 +39,15 @@
 <text x="690" y="292" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#59636e">integrated from the watts</text>
 <text x="690" y="322" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#1f2328">1 number</text>
 <text x="690" y="342" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#59636e">generic load price cap</text>
-<path d="M276 226.0 H332" stroke="#8c959f" stroke-width="1.5" fill="none" marker-end="url(#a)"/>
-<path d="M600 226.0 H656" stroke="#8c959f" stroke-width="1.5" fill="none" marker-end="url(#a)"/>
-<path d="M794 354 V382 H146 V366" stroke="#9a6700" stroke-width="1.5" stroke-dasharray="4 4" fill="none" marker-end="url(#w)"/>
-<text x="470.0" y="400" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11.5" fill="#9a6700">setting the price cap posts straight back to the box</text>
-<rect x="24" y="422" width="892" height="66" rx="10" fill="#f6f8fa" stroke="#d1d9e0" stroke-dasharray="5 4"/>
-<text x="44" y="449" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="600" fill="#1f2328">Built in: <tspan font-family="ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace" font-size="11.5" fill="#0550ae">device_class: energy</tspan> totals for the Energy dashboard</text>
-<text x="44" y="470" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" fill="#59636e">Grid and battery are split into directions and the watts integrated into kWh — six totals the Energy dashboard lists directly, no YAML.</text>
+<text x="690" y="372" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="600" fill="#1a7f37">6 solar forecasts</text>
+<text x="690" y="392" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#59636e">optional; the roof, learned</text>
+<text x="690" y="412" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#59636e">from its own history</text>
+<path d="M276 264.0 H332" stroke="#8c959f" stroke-width="1.5" fill="none" marker-end="url(#a)"/>
+<path d="M600 264.0 H656" stroke="#8c959f" stroke-width="1.5" fill="none" marker-end="url(#a)"/>
+<path d="M794 430 V458 H146 V442" stroke="#9a6700" stroke-width="1.5" stroke-dasharray="4 4" fill="none" marker-end="url(#w)"/>
+<text x="470.0" y="476" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11.5" fill="#9a6700">setting the price cap posts straight back to the box</text>
+<rect x="24" y="498" width="892" height="66" rx="10" fill="#f6f8fa" stroke="#d1d9e0" stroke-dasharray="5 4"/>
+<text x="44" y="525" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="600" fill="#1f2328">Built in: <tspan font-family="ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace" font-size="11.5" fill="#0550ae">device_class: energy</tspan> totals for the Energy dashboard</text>
+<text x="44" y="546" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" fill="#59636e">Grid and battery are split into directions and the watts integrated into kWh — six totals the Energy dashboard lists directly, no YAML.</text>
 <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#8c959f"/></marker><marker id="w" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#9a6700"/></marker></defs>
 </svg>

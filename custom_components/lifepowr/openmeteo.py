@@ -83,9 +83,7 @@ class OpenMeteoClient:
     #: Most days of the recent past the forecast endpoint will serve.
     MAX_PAST_DAYS: Final = 92
 
-    async def async_forecast(
-        self, days: int = 3, past_days: int = 1
-    ) -> list[SkyHour]:
+    async def async_forecast(self, days: int = 3, past_days: int = 1) -> list[SkyHour]:
         """Return the sky around now, hour by hour.
 
         ``past_days`` reaches back into the recent past that the reanalysis
@@ -108,9 +106,7 @@ class OpenMeteoClient:
             {"start_date": start.isoformat(), "end_date": end.isoformat()},
         )
 
-    async def _async_read(
-        self, url: str, extra: dict[str, Any]
-    ) -> list[SkyHour]:
+    async def _async_read(self, url: str, extra: dict[str, Any]) -> list[SkyHour]:
         """Fetch one endpoint and map it onto hours."""
         params = {
             "latitude": self._latitude,
@@ -151,9 +147,7 @@ def _parse(payload: Any) -> list[SkyHour]:
 
     hours: list[SkyHour] = []
     for index, stamp in enumerate(times):
-        values = [
-            _number(series, index) for series in (ghi, dni, dhi)
-        ]
+        values = [_number(series, index) for series in (ghi, dni, dhi)]
         if any(value is None for value in values):
             # A missing component would silently read as a dark sky.
             continue

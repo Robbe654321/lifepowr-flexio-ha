@@ -63,6 +63,7 @@ def linke_turbidity(day_of_year: int, latitude: float) -> float:
         phase += math.pi
     return _LINKE_MEAN + _LINKE_SWING * math.cos(phase)
 
+
 #: ASHRAE incidence angle modifier coefficient for ordinary glass.
 _IAM_B0: Final = 0.05
 
@@ -135,9 +136,7 @@ def _julian_century(when: datetime) -> float:
     return (julian_day - 2451545.0) / 36525.0
 
 
-def solar_position(
-    when: datetime, latitude: float, longitude: float
-) -> SolarPosition:
+def solar_position(when: datetime, latitude: float, longitude: float) -> SolarPosition:
     """Return the sun's position, following NOAA's solar position equations.
 
     Accurate to well under a tenth of a degree for any date this integration
@@ -146,9 +145,7 @@ def solar_position(
     when = when.astimezone(UTC)
     century = _julian_century(when)
 
-    mean_longitude = (
-        280.46646 + century * (36000.76983 + century * 0.0003032)
-    ) % 360.0
+    mean_longitude = (280.46646 + century * (36000.76983 + century * 0.0003032)) % 360.0
     mean_anomaly = 357.52911 + century * (35999.05029 - 0.0001537 * century)
     eccentricity = 0.016708634 - century * (0.000042037 + 0.0000001267 * century)
 
@@ -164,10 +161,15 @@ def solar_position(
         true_longitude - 0.00569 - 0.00478 * math.sin(math.radians(omega))
     )
 
-    mean_obliquity = 23.0 + (
-        26.0 + (21.448 - century * (46.815 + century * (0.00059 - century * 0.001813)))
+    mean_obliquity = (
+        23.0
+        + (
+            26.0
+            + (21.448 - century * (46.815 + century * (0.00059 - century * 0.001813)))
+            / 60.0
+        )
         / 60.0
-    ) / 60.0
+    )
     obliquity = mean_obliquity + 0.00256 * math.cos(math.radians(omega))
 
     declination = math.asin(
@@ -223,9 +225,7 @@ def _refraction(elevation: float) -> float:
         return 0.0
     if elevation > 5.0:
         tan_e = math.tan(math.radians(elevation))
-        arcseconds = (
-            58.1 / tan_e - 0.07 / tan_e**3 + 0.000086 / tan_e**5
-        )
+        arcseconds = 58.1 / tan_e - 0.07 / tan_e**3 + 0.000086 / tan_e**5
     elif elevation > -0.575:
         arcseconds = 1735.0 + elevation * (
             -518.2 + elevation * (103.4 + elevation * (-12.79 + elevation * 0.711))
@@ -239,8 +239,7 @@ def air_mass(zenith: float, altitude: float = 0.0) -> float:
     """Return the pressure-corrected relative air mass (Kasten-Young)."""
     zenith = min(zenith, 90.0)
     relative = 1.0 / (
-        math.cos(math.radians(zenith))
-        + 0.50572 * (96.07995 - zenith) ** -1.6364
+        math.cos(math.radians(zenith)) + 0.50572 * (96.07995 - zenith) ** -1.6364
     )
     # Barometric pressure ratio for the site's height above sea level.
     return relative * math.exp(-altitude / 8434.5)
@@ -276,9 +275,11 @@ def clear_sky(
     beam = 0.664 + 0.163 / fh1
     dni_direct = extra * max(beam * math.exp(-0.09 * mass * (linke - 1.0)), 0.0)
     # Perez's empirical cap, which keeps low sun angles from running away.
-    capped = ghi * max(
-        1.0 - (0.1 - 0.2 * math.exp(-linke)) / (0.1 + 0.882 / fh1), 0.0
-    ) / cos_zenith
+    capped = (
+        ghi
+        * max(1.0 - (0.1 - 0.2 * math.exp(-linke)) / (0.1 + 0.882 / fh1), 0.0)
+        / cos_zenith
+    )
     dni = min(dni_direct, capped)
 
     return Irradiance(ghi=ghi, dni=dni, dhi=max(ghi - dni * cos_zenith, 0.0))
@@ -353,13 +354,12 @@ def sector_weights(azimuth: float) -> tuple[int, float]:
 
 def incidence_angle(tilt: float, azimuth: float, position: SolarPosition) -> float:
     """Return the angle between the sun and a roof plane's normal, degrees."""
-    return math.degrees(math.acos(min(max(
-        _cos_incidence(tilt, azimuth, position), -1.0), 1.0)))
+    return math.degrees(
+        math.acos(min(max(_cos_incidence(tilt, azimuth, position), -1.0), 1.0))
+    )
 
 
-def _cos_incidence(
-    tilt: float, azimuth: float, position: SolarPosition
-) -> float:
+def _cos_incidence(tilt: float, azimuth: float, position: SolarPosition) -> float:
     """Return the cosine of the angle of incidence on a tilted plane."""
     tilt_rad = math.radians(tilt)
     zenith_rad = math.radians(position.zenith)
@@ -427,9 +427,7 @@ def plane_of_array(
     extra = extraterrestrial_irradiance(position.day_of_year)
     anisotropy = min(max(sky.dni / extra, 0.0), 1.0)
     ratio = cos_aoi / cos_zenith
-    horizon_brightening = math.sqrt(
-        min(max(sky.dni * cos_zenith / sky.ghi, 0.0), 1.0)
-    )
+    horizon_brightening = math.sqrt(min(max(sky.dni * cos_zenith / sky.ghi, 0.0), 1.0))
     diffuse = sky.dhi * (
         anisotropy * ratio
         + (1.0 - anisotropy)
@@ -446,7 +444,21 @@ def plane_of_array(
 def compass_point(azimuth: float) -> str:
     """Return a 16-point compass label for an azimuth, for human-readable output."""
     points = (
-        "N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
-        "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW",
+        "N",
+        "NNE",
+        "NE",
+        "ENE",
+        "E",
+        "ESE",
+        "SE",
+        "SSE",
+        "S",
+        "SSW",
+        "SW",
+        "WSW",
+        "W",
+        "WNW",
+        "NW",
+        "NNW",
     )
     return points[int((azimuth % 360.0) / 22.5 + 0.5) % 16]

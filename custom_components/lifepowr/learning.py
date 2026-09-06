@@ -191,8 +191,7 @@ class Array:
     def orientation(self) -> str:
         """Return a human-readable description of the plane."""
         return (
-            f"{compass_point(self.azimuth)} {self.azimuth:.0f}°"
-            f" / {self.tilt:.0f}° tilt"
+            f"{compass_point(self.azimuth)} {self.azimuth:.0f}° / {self.tilt:.0f}° tilt"
         )
 
     def as_dict(self) -> dict[str, Any]:
@@ -317,8 +316,11 @@ class SolarModel:
                 albedo=self.albedo,
                 horizon=self.horizon,
             )
-            total += array.peak_power * poa / 1000.0 * _derate(
-                poa, temperature, self.temperature_coefficient
+            total += (
+                array.peak_power
+                * poa
+                / 1000.0
+                * _derate(poa, temperature, self.temperature_coefficient)
             )
         return total
 
@@ -356,8 +358,7 @@ class SolarModel:
             albedo=float(data.get("albedo", DEFAULT_ALBEDO)),
             horizon=(
                 Horizon(tuple(float(value) for value in stored))
-                if (stored := data.get("horizon"))
-                and len(stored) == HORIZON_SECTORS
+                if (stored := data.get("horizon")) and len(stored) == HORIZON_SECTORS
                 else NO_HORIZON
             ),
         )
@@ -636,9 +637,7 @@ def select_clear_intervals(
     }
     return [
         index
-        for index, (interval, score) in enumerate(
-            zip(intervals, scores, strict=True)
-        )
+        for index, (interval, score) in enumerate(zip(intervals, scores, strict=True))
         if score >= thresholds.get(interval.group, 0.0)
     ]
 
@@ -1184,14 +1183,10 @@ def _split_days(
         trusted = usable
 
     training = {
-        index
-        for index in usable
-        if intervals[index].sample.start.toordinal() % 5 != 0
+        index for index in usable if intervals[index].sample.start.toordinal() % 5 != 0
     }
     judging = {
-        index
-        for index in trusted
-        if intervals[index].sample.start.toordinal() % 5 == 0
+        index for index in trusted if intervals[index].sample.start.toordinal() % 5 == 0
     }
     return training, judging
 
@@ -1227,9 +1222,7 @@ def _add_horizon(
             candidate,
         )
         shaded.extend(
-            Array(
-                tilt=tilt, azimuth=azimuth, peak_power=capacity, source=plan.source
-            )
+            Array(tilt=tilt, azimuth=azimuth, peak_power=capacity, source=plan.source)
             for (tilt, azimuth), capacity in zip(settled, capacities, strict=True)
             if capacity > 0.0
         )

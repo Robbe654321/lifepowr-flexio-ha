@@ -3,7 +3,9 @@
 <p align="center">
   Local-polling integration for the <a href="https://www.lifepowr.io">LIFEPOWR</a>
   <strong>FlexiObox</strong> home energy management system.<br>
-  No cloud, no account, no API key — everything stays on your own network.
+  No account, no API key, no cloud between you and the box.<br>
+  It also learns the shape of your roof from your own production history,
+  and forecasts from it.
 </p>
 
 <p align="center">

@@ -105,8 +105,7 @@ def mock_history():
     """Serve a synthetic year of hourly production out of the recorder."""
     samples = synthesise([(30.0, 100.0, 4000.0), (30.0, 260.0, 3000.0)])
     rows = [
-        {"start": sample.start.timestamp(), "mean": sample.power}
-        for sample in samples
+        {"start": sample.start.timestamp(), "mean": sample.power} for sample in samples
     ]
 
     def _statistics(hass, start, end, statistic_ids, period, units, types):
@@ -159,7 +158,7 @@ def _hour_floor() -> datetime:
 
 
 def test_energy_clips_partial_hours() -> None:
-    """"The rest of today" has to mean exactly that, mid-hour included."""
+    """ "The rest of today" has to mean exactly that, mid-hour included."""
     start = datetime(2024, 6, 21, 10, 0, tzinfo=UTC)
     forecast = SolarForecast(
         hours=((start, 2000.0), (start + timedelta(hours=1), 4000.0))
@@ -168,9 +167,9 @@ def test_energy_clips_partial_hours() -> None:
     assert forecast.energy(
         start + timedelta(minutes=30), start + timedelta(hours=2)
     ) == pytest.approx(5.0)
-    assert forecast.energy(
-        start - timedelta(days=1), start - timedelta(hours=12)
-    ) == 0.0
+    assert (
+        forecast.energy(start - timedelta(days=1), start - timedelta(hours=12)) == 0.0
+    )
 
 
 def test_power_and_peak_read_the_right_hour() -> None:
@@ -272,9 +271,7 @@ async def test_the_service_relearns_the_roof(hass, init_solar) -> None:
     """Called by hand after adding panels, rather than waiting for the night."""
     solar = init_solar.runtime_data.solar
     first = solar.model
-    with patch.object(
-        solar, "async_learn", wraps=solar.async_learn
-    ) as relearn:
+    with patch.object(solar, "async_learn", wraps=solar.async_learn) as relearn:
         await hass.services.async_call(
             DOMAIN, SERVICE_LEARN_SOLAR_MODEL, {}, blocking=True
         )
@@ -293,9 +290,7 @@ async def test_the_service_complains_when_the_forecast_is_off(
         )
 
 
-async def test_no_solar_entities_when_the_option_is_off(
-    hass, init_integration
-) -> None:
+async def test_no_solar_entities_when_the_option_is_off(hass, init_integration) -> None:
     """The forecast is opt-in, and leaves no trace when it is not asked for."""
     assert init_integration.runtime_data.solar is None
     assert hass.states.get(MODEL_SENSOR) is None
@@ -328,9 +323,7 @@ async def test_too_little_history_leaves_the_roof_unlearned(
     assert hass.states.get(MODEL_SENSOR).state == "unavailable"
 
 
-async def test_no_forecast_without_the_recorder(
-    hass, solar_entry, mock_client
-) -> None:
+async def test_no_forecast_without_the_recorder(hass, solar_entry, mock_client) -> None:
     """The statistics are where the history lives; without them there is none."""
     assert "recorder" not in hass.config.components
     solar_entry.add_to_hass(hass)
@@ -343,9 +336,12 @@ async def test_the_model_powers_a_dark_hour_at_zero(hass, init_solar) -> None:
     """Night is night, whatever the weather service says about temperature."""
     solar = init_solar.runtime_data.solar
     midnight = datetime(2024, 12, 21, 1, 0, tzinfo=UTC)
-    assert solar.model.power(
-        midnight, midnight + timedelta(hours=1), Irradiance(0.0, 0.0, 0.0)
-    ) == 0.0
+    assert (
+        solar.model.power(
+            midnight, midnight + timedelta(hours=1), Irradiance(0.0, 0.0, 0.0)
+        )
+        == 0.0
+    )
 
 
 async def test_the_action_exists_without_any_box(hass) -> None:

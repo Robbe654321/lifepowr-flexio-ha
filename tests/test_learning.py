@@ -66,9 +66,7 @@ def synthesise(
             power *= 1.0 + rng.gauss(0.0, noise)
             if ac_limit is not None:
                 power = min(power, ac_limit)
-            samples.append(
-                PowerSample(start=begin, end=end, power=max(power, 0.0))
-            )
+            samples.append(PowerSample(start=begin, end=end, power=max(power, 0.0)))
     return samples
 
 
@@ -150,9 +148,7 @@ def test_reports_capacity_below_the_inverter_ceiling() -> None:
     the fit; counting them would teach it that the roof stops at the ceiling.
     """
     limit = 3000.0
-    model = fit(
-        synthesise([(35.0, 180.0, 5000.0)], ac_limit=limit), LAT, LON, ALT
-    )
+    model = fit(synthesise([(35.0, 180.0, 5000.0)], ac_limit=limit), LAT, LON, ALT)
     assert model is not None
     assert model.peak_power > limit * 1.2
     assert model.ac_limit is not None
