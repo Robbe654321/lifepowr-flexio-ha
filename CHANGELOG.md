@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-09-06
+
 ### Fixed
 
 - **Battery energy was wildly overstated.** `TotalInvPowerFiltered` is the
@@ -22,6 +24,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 
 - **Battery power** sensor, derived rather than reported.
+- A ready-made four-view Lovelace dashboard, in English and Dutch, under
+  `dashboards/`. Live power with sparklines, the Energy dashboard's own cards,
+  a battery view, and the inverter-versus-battery distinction spelled out.
+  Core cards only — nothing extra to install.
 - Six cumulative kWh sensors, so the Energy dashboard can be configured
   straight from the integration: solar production, household consumption, grid
   import, grid export, battery charge and battery discharge energy. Each is a
@@ -84,5 +90,6 @@ The API also signs consumption negative. Grid power and household consumption
 are negated so they read positively in Home Assistant; battery flow keeps its
 raw sign, where positive already means discharging.
 
-[Unreleased]: https://github.com/Robbe654321/lifepowr-flexio-ha/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/Robbe654321/lifepowr-flexio-ha/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/Robbe654321/lifepowr-flexio-ha/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Robbe654321/lifepowr-flexio-ha/releases/tag/v0.1.0
