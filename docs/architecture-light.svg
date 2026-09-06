@@ -22,7 +22,7 @@
 <text x="366" y="252" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#1f2328">spelling-insensitive</text>
 <text x="366" y="282" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="600" fill="#1a7f37">Reports watts, not kW</text>
 <text x="366" y="302" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="600" fill="#1a7f37">Flips grid + load sign</text>
-<text x="366" y="332" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#59636e">polls every 15 s</text>
+<text x="366" y="332" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#59636e">polls every 10 s, tunable</text>
 <rect x="672" y="92" width="244" height="268" rx="10" fill="#f6f8fa" stroke="#d1d9e0"/>
 <text x="690" y="124" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="15" font-weight="600" fill="#1f2328">Home Assistant</text>
 <text x="690" y="144" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11.5" fill="#59636e">one device, real entities</text>

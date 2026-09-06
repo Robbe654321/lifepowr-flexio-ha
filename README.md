@@ -17,7 +17,7 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/architecture-dark.svg">
-    <img alt="The FlexiObox serves a local API; the integration polls it every 15 seconds, normalises units and signs, and exposes 12 sensors, six kWh energy totals and one number in Home Assistant." src="docs/architecture-light.svg" width="100%">
+    <img alt="The FlexiObox serves a local API; the integration polls it every 10 seconds, normalises units and signs, and exposes 12 sensors, six kWh energy totals and one number in Home Assistant." src="docs/architecture-light.svg" width="100%">
   </picture>
 </p>
 
@@ -65,6 +65,23 @@ a bare host and a full `http://…` URL are accepted.
 
 If the box's address changes later, use **Reconfigure** on the integration
 rather than deleting and re-adding it, so entity history survives.
+
+### Poll interval
+
+**Configure** on the integration sets how often the box is read: **10 seconds
+by default, adjustable from 2 to 300**. The box is on your own network and
+answers in milliseconds, so a few seconds costs nothing — the FlexiO app itself
+refreshes at about that rate. Changing it reloads the integration; entity
+history is kept.
+
+Polling faster writes more states to your recorder database. If you want
+second-level detail on a chart but not months of it, keep the interval low and
+[exclude](https://www.home-assistant.io/integrations/recorder/#exclude) the
+sensors you do not need long-term.
+
+> Home Assistant's own history charts switch to 5-minute averages once you zoom
+> out past a few hours — that is long-term statistics, not your poll interval.
+> Recent history shows every reading.
 
 ## Entities
 
@@ -213,7 +230,8 @@ this differs from the published documentation.
 
 ## Data updates
 
-Polled every 15 seconds. The API exposes filtered, instantaneous values only —
+Polled every 10 seconds by default, configurable from 2 to 300 seconds. The API
+exposes filtered, instantaneous values only —
 there is no history to backfill, so long-term statistics start the moment you
 install the integration.
 

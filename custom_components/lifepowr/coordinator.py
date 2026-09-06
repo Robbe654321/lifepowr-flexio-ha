@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import FlexioClient, FlexioConnectionError, FlexioError
-from .const import DOMAIN, LOGGER, SCAN_INTERVAL
+from .const import DEFAULT_SCAN_INTERVAL, DOMAIN, LOGGER
 
 type FlexioConfigEntry = ConfigEntry[FlexioCoordinator]
 
@@ -24,12 +27,13 @@ class FlexioCoordinator(DataUpdateCoordinator[dict[str, float]]):
         client: FlexioClient,
     ) -> None:
         """Initialise the coordinator."""
+        seconds = config_entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
         super().__init__(
             hass,
             LOGGER,
             config_entry=config_entry,
             name=DOMAIN,
-            update_interval=SCAN_INTERVAL,
+            update_interval=timedelta(seconds=seconds),
         )
         self.client = client
 

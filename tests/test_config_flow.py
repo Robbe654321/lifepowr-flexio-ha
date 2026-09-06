@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
+
+from homeassistant.config_entries import SOURCE_USER
+from homeassistant.const import CONF_HOST, CONF_SCAN_INTERVAL
+from homeassistant.data_entry_flow import FlowResultType
 import pytest
 
 from custom_components.lifepowr.api import FlexioConnectionError, FlexioResponseError
 from custom_components.lifepowr.const import DOMAIN
-from homeassistant.config_entries import SOURCE_USER
-from homeassistant.const import CONF_HOST
-from homeassistant.data_entry_flow import FlowResultType
 
 from .conftest import HOST
 
@@ -95,3 +97,23 @@ async def test_reconfigure_error(hass, mock_client, init_integration) -> None:
     assert result["type"] is FlowResultType.FORM
     assert result["errors"] == {"base": "cannot_connect"}
     assert init_integration.data[CONF_HOST] == HOST
+
+
+async def test_options_flow_changes_poll_interval(
+    hass, mock_client, init_integration
+) -> None:
+    """The poll interval is configurable and takes effect on reload."""
+    assert init_integration.runtime_data.update_interval == timedelta(seconds=10)
+
+    result = await hass.config_entries.options.async_init(init_integration.entry_id)
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "init"
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {CONF_SCAN_INTERVAL: 3}
+    )
+    await hass.async_block_till_done()
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert init_integration.options == {CONF_SCAN_INTERVAL: 3}
+    assert init_integration.runtime_data.update_interval == timedelta(seconds=3)

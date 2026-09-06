@@ -15,6 +15,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   restored across restarts. The bidirectional grid and battery flows are split
   into two positive-only directions so importing and exporting do not cancel
   out, and gaps longer than five minutes are skipped rather than guessed at.
+- Configurable poll interval, 2 to 300 seconds, via **Configure** on the
+  integration. The box is local and answers in milliseconds, so the vendor
+  app's few-second refresh rate is reachable.
+
+### Changed
+
+- Default poll interval lowered from 15 to 10 seconds.
 
 ### Removed
 

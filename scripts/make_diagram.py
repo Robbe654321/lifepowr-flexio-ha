@@ -34,9 +34,7 @@ DARK = {
     "arrow": "#6e7681",
 }
 
-FONT = (
-    "-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif"
-)
+FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif"
 MONO = "ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace"
 
 COLUMNS = [
@@ -70,7 +68,7 @@ COLUMNS = [
             ("accent", "Reports watts, not kW"),
             ("accent", "Flips grid + load sign"),
             ("gap", ""),
-            ("muted", "polls every 15 s"),
+            ("muted", "polls every 10 s, tunable"),
         ],
     },
     {
@@ -97,21 +95,29 @@ BAND_Y, BAND_H = 422, 66
 
 
 def esc(text: str) -> str:
+    """Escape the characters that are not legal as SVG text."""
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 def build(c: dict[str, str]) -> str:
+    """Render the whole diagram for one colour scheme."""
     p: list[str] = [
-        f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" '
-        f'viewBox="0 0 {W} {H}" role="img" '
-        f'aria-label="Data flow from the FlexiObox through the integration '
-        f'into Home Assistant">',
+        (
+            f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" '
+            f'viewBox="0 0 {W} {H}" role="img" '
+            f'aria-label="Data flow from the FlexiObox through the integration '
+            f'into Home Assistant">'
+        ),
         f'<rect width="{W}" height="{H}" fill="{c["bg"]}"/>',
-        f'<text x="24" y="40" font-family="{FONT}" font-size="19" '
-        f'font-weight="600" fill="{c["text"]}">How it fits together</text>',
-        f'<text x="24" y="64" font-family="{FONT}" font-size="13" '
-        f'fill="{c["muted"]}">Everything stays on your network. '
-        f'No cloud, no account, no authentication.</text>',
+        (
+            f'<text x="24" y="40" font-family="{FONT}" font-size="19" '
+            f'font-weight="600" fill="{c["text"]}">How it fits together</text>'
+        ),
+        (
+            f'<text x="24" y="64" font-family="{FONT}" font-size="13" '
+            f'fill="{c["muted"]}">Everything stays on your network. '
+            f"No cloud, no account, no authentication.</text>"
+        ),
     ]
 
     for col in COLUMNS:
@@ -123,12 +129,12 @@ def build(c: dict[str, str]) -> str:
         p.append(
             f'<text x="{x + 18}" y="{BOX_Y + 32}" font-family="{FONT}" '
             f'font-size="15" font-weight="600" fill="{c["text"]}">'
-            f'{esc(col["title"])}</text>'
+            f"{esc(col['title'])}</text>"
         )
         p.append(
             f'<text x="{x + 18}" y="{BOX_Y + 52}" font-family="{FONT}" '
             f'font-size="11.5" fill="{c["muted"]}">'
-            f'{esc(col["subtitle"])}</text>'
+            f"{esc(col['subtitle'])}</text>"
         )
         p.append(
             f'<line x1="{x + 18}" y1="{BOX_Y + 66}" x2="{x + w - 18}" '
@@ -153,7 +159,7 @@ def build(c: dict[str, str]) -> str:
             p.append(
                 f'<text x="{x + 18}" y="{y}" font-family="{font}" '
                 f'font-size="{size}" font-weight="{weight}" fill="{fill}">'
-                f'{esc(label)}</text>'
+                f"{esc(label)}</text>"
             )
             y += 20
 
@@ -175,7 +181,7 @@ def build(c: dict[str, str]) -> str:
     p.append(
         f'<text x="{W / 2}" y="{BOX_Y + BOX_H + 40}" text-anchor="middle" '
         f'font-family="{FONT}" font-size="11.5" fill="{c["write"]}">'
-        f'setting the price cap posts straight back to the box</text>'
+        f"setting the price cap posts straight back to the box</text>"
     )
 
     # Bottom band: the built-in energy totals.
@@ -187,13 +193,13 @@ def build(c: dict[str, str]) -> str:
         f'<text x="44" y="{BAND_Y + 27}" font-family="{FONT}" font-size="13" '
         f'font-weight="600" fill="{c["text"]}">Built in: '
         f'<tspan font-family="{MONO}" font-size="11.5" fill="{c["mono"]}">'
-        f'device_class: energy</tspan> totals for the Energy dashboard</text>'
+        f"device_class: energy</tspan> totals for the Energy dashboard</text>"
     )
     p.append(
         f'<text x="44" y="{BAND_Y + 48}" font-family="{FONT}" font-size="12" '
         f'fill="{c["muted"]}">Grid and battery are split into directions and '
-        f'the watts integrated into kWh — six totals the Energy dashboard '
-        f'lists directly, no YAML.</text>'
+        f"the watts integrated into kWh — six totals the Energy dashboard "
+        f"lists directly, no YAML.</text>"
     )
 
     p.append(
@@ -209,6 +215,7 @@ def build(c: dict[str, str]) -> str:
 
 
 def main() -> None:
+    """Write both colour schemes into docs/."""
     out = Path(__file__).resolve().parent.parent / "docs"
     out.mkdir(exist_ok=True)
     (out / "architecture-light.svg").write_text(build(LIGHT))

@@ -32,9 +32,25 @@
       "reconfigure_successful": "Reconfiguration was successful"
     }
   },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Polling",
+        "description": "How often to read the FlexiObox. It answers in milliseconds and is on your own network, so a few seconds is fine. Faster polling means more states recorded in your database.",
+        "data": {
+          "scan_interval": "Poll interval"
+        },
+        "data_description": {
+          "scan_interval": "Seconds between readings. Default 10, minimum 2. The FlexiO app itself refreshes every few seconds."
+        }
+      }
+    }
+  },
   "entity": {
     "number": {
-      "generic_load_max_price": { "name": "Generic load maximum price" }
+      "generic_load_max_price": {
+        "name": "Generic load maximum price"
+      }
     },
     "sensor": {
       "pv_power": { "name": "Solar production" },
