@@ -29,6 +29,12 @@ KEY_GENERIC_LOAD_POWER: Final = "generic_load_power"
 KEY_GENERIC_LOAD_MAX_PRICE: Final = "generic_load_max_price"
 KEY_TIMESTAMP: Final = "timestamp"
 
+#: Derived, not reported by the box. ``TotalInvPowerFiltered`` is the inverter's
+#: total AC power, which already contains the solar production; the battery's
+#: own flow is what remains after subtracting PV. Confirmed against the vendor
+#: app, which shows exactly this as "Batterij".
+KEY_BATTERY_POWER: Final = "battery_power"
+
 #: Raw field names per internal key. Matching is done on a normalised
 #: (lowercase, alphanumeric-only) form, so casing and separators do not matter
 #: and only genuinely different spellings need to be listed.
@@ -66,6 +72,11 @@ FIELD_NEW_MAX_PRICE: Final = "newMaxPrice"
 
 #: Epoch values above this are milliseconds rather than seconds.
 _MS_THRESHOLD: Final = 1e11
+
+#: How far to descend into a nested document looking for known fields. Deep
+#: enough for a ``{"ems": {...}}`` style envelope, shallow enough not to walk
+#: an entire unexpected payload.
+_MAX_WALK_DEPTH: Final = 3
 
 
 def normalise_name(name: str) -> str:
@@ -114,6 +125,23 @@ def normalise_timestamp(raw: float) -> float | None:
     return raw / 1000 if raw > _MS_THRESHOLD else raw
 
 
+def apply_derived(data: dict[str, float]) -> dict[str, float]:
+    """Add values the box does not report but that follow from the ones it does.
+
+    ``TotalInvPowerFiltered`` is the whole inverter, solar included. Treating it
+    as the battery makes every sunny hour look like a discharge, so the battery
+    flow is derived here instead:
+
+        battery = inverter - PV
+
+    Same sign convention as the inverter: positive discharging, negative
+    charging. Skipped when either input is missing.
+    """
+    if KEY_INVERTER_POWER in data and KEY_PV_POWER in data:
+        data[KEY_BATTERY_POWER] = data[KEY_INVERTER_POWER] - data[KEY_PV_POWER]
+    return data
+
+
 def parse_payload(payload: Any) -> dict[str, float]:
     """Map an arbitrary API document onto the internal keys.
 
@@ -123,7 +151,7 @@ def parse_payload(payload: Any) -> dict[str, float]:
     result: dict[str, float] = {}
 
     def _walk(node: Any, depth: int) -> None:
-        if depth > 3 or not isinstance(node, dict):
+        if depth > _MAX_WALK_DEPTH or not isinstance(node, dict):
             return
         for raw_name, raw_value in node.items():
             key = ALIAS_LOOKUP.get(normalise_name(str(raw_name)))

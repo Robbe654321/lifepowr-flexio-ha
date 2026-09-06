@@ -85,6 +85,9 @@ SENSORS: tuple[FlexioSensorEntityDescription, ...] = (
         **POWER_SENSOR,
     ),
     FlexioSensorEntityDescription(
+        key=api.KEY_BATTERY_POWER, translation_key="battery_power", **POWER_SENSOR
+    ),
+    FlexioSensorEntityDescription(
         key=api.KEY_INVERTER_POWER, translation_key="inverter_power", **POWER_SENSOR
     ),
     FlexioSensorEntityDescription(

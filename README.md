@@ -17,7 +17,7 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/architecture-dark.svg">
-    <img alt="The FlexiObox serves a local API; the integration polls it every 15 seconds, normalises units and signs, and exposes 12 sensors, six kWh energy totals and one number in Home Assistant." src="docs/architecture-light.svg" width="100%">
+    <img alt="The FlexiObox serves a local API; the integration polls it every 10 seconds, normalises units and signs, and exposes 13 sensors, six kWh energy totals and one number in Home Assistant." src="docs/architecture-light.svg" width="100%">
   </picture>
 </p>
 
@@ -56,6 +56,9 @@ per measurement is detected automatically and handled read-only.
 Copy `custom_components/lifepowr` into your `config/custom_components/`
 directory and restart Home Assistant.
 
+> Not in the HACS default store yet — [`docs/hacs.md`](docs/hacs.md) tracks
+> what is left for that, and how to submit it.
+
 ## Configuration
 
 One setting: the host. `myio.local` is the default and works on most networks.
@@ -65,6 +68,23 @@ a bare host and a full `http://…` URL are accepted.
 
 If the box's address changes later, use **Reconfigure** on the integration
 rather than deleting and re-adding it, so entity history survives.
+
+### Poll interval
+
+**Configure** on the integration sets how often the box is read: **10 seconds
+by default, adjustable from 2 to 300**. The box is on your own network and
+answers in milliseconds, so a few seconds costs nothing — the FlexiO app itself
+refreshes at about that rate. Changing it reloads the integration; entity
+history is kept.
+
+Polling faster writes more states to your recorder database. If you want
+second-level detail on a chart but not months of it, keep the interval low and
+[exclude](https://www.home-assistant.io/integrations/recorder/#exclude) the
+sensors you do not need long-term.
+
+> Home Assistant's own history charts switch to 5-minute averages once you zoom
+> out past a few hours — that is long-term statistics, not your poll interval.
+> Recent history shows every reading.
 
 ## Entities
 
@@ -76,7 +96,8 @@ reports — nothing shows up permanently unknown.
 | Solar production | W | Total PV production |
 | Household consumption | W | Positive while consuming |
 | Grid power | W | Positive importing, negative exporting |
-| Inverter power | W | Positive discharging, negative charging |
+| Battery power | W | Positive discharging, negative charging |
+| Inverter power (total AC) | W | Solar **and** battery together — see below |
 | Battery state of charge | % | |
 | Battery state of health | % | |
 | Battery voltage | V | |
@@ -97,8 +118,8 @@ integrated from those power readings:
 | Household consumption energy | kWh | Household consumption |
 | Grid import energy | kWh | Grid power, while positive |
 | Grid export energy | kWh | Grid power, while negative |
-| Battery charge energy | kWh | Inverter power, while negative |
-| Battery discharge energy | kWh | Inverter power, while positive |
+| Battery charge energy | kWh | Battery power, while negative |
+| Battery discharge energy | kWh | Battery power, while positive |
 
 ## Units and sign convention
 
@@ -108,6 +129,12 @@ hardware. If you only read one section, read this one.
 **The API reports watts, not kilowatts.** The website's table says kW for every
 power field. A box reporting `-5341.34` for grid power is drawing 5.3 kW — as
 kilowatts that would be 5.3 megawatts.
+
+**`TotalInvPowerFiltered` is not the battery.** It is the inverter's total AC
+power, solar included. The battery's own flow is `inverter − PV`, which the
+integration derives and exposes as **Battery power**. Use that one for energy
+accounting; treating the inverter reading as the battery turns every sunny hour
+into a phantom discharge.
 
 **Consumption is negative.** The API uses a load convention: importing from the
 grid, consuming in the house and charging the battery are all negative. Solar
@@ -130,6 +157,8 @@ Two independent identities, both closing within 3%:
 | --- | --- | --- | --- |
 | `grid ≈ load + inverter` | −5458 W | −5341 W | 2.2% — filter lag |
 | `battery DC ≈ inverter − PV` | −3617 W | −3500 W | 3.3% — conversion loss |
+
+That second identity is also the definition of the battery power sensor.
 
 421.4 V × −8.31 A is 3.5 kW going into the battery, while the inverter pulls
 2456 W from the grid plus 1161 W of solar. The 117 W difference is the
@@ -164,7 +193,7 @@ variants.
 
 The Energy dashboard only lists sensors that report cumulative energy in kWh,
 so the box's instantaneous watts cannot be selected there directly. The
-integration therefore integrates them for you: every 15 seconds each power
+integration therefore integrates them for you: on every poll each power
 reading is added to a `total_increasing` kWh total, with the bidirectional grid
 and battery flows split into two positive-only directions each so importing and
 exporting never cancel out. The totals are restored across restarts, and gaps
@@ -198,6 +227,44 @@ hourly.
 > the Energy dashboard at the new entities afterwards; their history starts
 > fresh.
 
+## Ready-made dashboard
+
+The Energy dashboard answers "how much", by the hour and by the day. It does
+not show you what the box is doing *this second*, and it has nothing to say
+about state of charge, battery voltage, or the difference between the inverter
+and the battery.
+
+[`dashboards/energy.yaml`](dashboards/energy.yaml) is a complete four-view
+dashboard that does. Dutch: [`dashboards/energy-nl.yaml`](dashboards/energy-nl.yaml).
+
+<p align="center">
+  <img alt="The Now view: solar, house, grid and battery as tiles with 24-hour sparklines, a state-of-charge gauge, and today's produced, consumed, imported, exported, charged and discharged totals." src="docs/dashboard-now.png" width="100%">
+</p>
+
+<sub>Part of the <strong>Now</strong> view. The readings come from a simulated
+box used to test the dashboard, not from a real installation.</sub>
+
+| View | Shows |
+| --- | --- |
+| **Now** | Live solar, house, grid and battery with 24-hour sparklines, state of charge, today's totals, and the last three hours as a graph |
+| **Energy** | Home Assistant's own energy cards, plus every kWh total day by day |
+| **Battery** | Charge, health, voltage, current, flow, and charge/discharge per day |
+| **System** | Inverter versus battery, the writable price cap, and diagnostics |
+
+Every card ships with Home Assistant — nothing else to install.
+
+**To use it:** **Settings → Dashboards → Add dashboard → New dashboard from
+scratch**. Open it, then **⋮ → Edit dashboard → ⋮ → Raw configuration editor**,
+and replace everything there with the contents of the file.
+
+Cards for a measurement your firmware does not report hide themselves rather
+than showing an error. The sparklines inside the tiles need **Home Assistant
+2025.10 or newer**; on older versions those tiles show a feature error and
+everything else still works.
+
+Both files are generated by `scripts/make_dashboard.py`, so the two languages
+cannot drift apart; CI fails if the committed files differ from the generator.
+
 ## Endpoints used
 
 | Endpoint | Purpose |
@@ -213,7 +280,8 @@ this differs from the published documentation.
 
 ## Data updates
 
-Polled every 15 seconds. The API exposes filtered, instantaneous values only —
+Polled every 10 seconds by default, configurable from 2 to 300 seconds. The API
+exposes filtered, instantaneous values only —
 there is no history to backfill, so long-term statistics start the moment you
 install the integration.
 

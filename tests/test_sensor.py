@@ -6,12 +6,6 @@ from datetime import timedelta
 from unittest.mock import patch
 
 from freezegun.api import FrozenDateTimeFactory
-import pytest
-from syrupy.assertion import SnapshotAssertion
-
-from custom_components.lifepowr.api import FlexioConnectionError
-from custom_components.lifepowr.const import SCAN_INTERVAL
-from custom_components.lifepowr.energy import MAX_SAMPLE_GAP
 from homeassistant.components.sensor import (
     ATTR_STATE_CLASS,
     SensorDeviceClass,
@@ -30,12 +24,17 @@ from homeassistant.const import (
 )
 from homeassistant.core import State
 from homeassistant.helpers import entity_registry as er
-
+import pytest
 from pytest_homeassistant_custom_component.common import (
     async_fire_time_changed,
     mock_restore_cache_with_extra_data,
     snapshot_platform,
 )
+from syrupy.assertion import SnapshotAssertion
+
+from custom_components.lifepowr.api import FlexioConnectionError
+from custom_components.lifepowr.const import SCAN_INTERVAL
+from custom_components.lifepowr.energy import MAX_SAMPLE_GAP
 
 from .conftest import SAMPLE_DATA
 
@@ -83,9 +82,7 @@ async def test_sensors(
         assert await hass.config_entries.async_setup(mock_config_entry.entry_id)
         await hass.async_block_till_done()
 
-    await snapshot_platform(
-        hass, entity_registry, snapshot, mock_config_entry.entry_id
-    )
+    await snapshot_platform(hass, entity_registry, snapshot, mock_config_entry.entry_id)
 
 
 async def test_missing_measurement_is_not_created(
@@ -154,9 +151,11 @@ async def test_entities_become_unavailable(
     ("entity_id", "expected", "unit"),
     [
         # Solar and battery flow keep the API's sign; the box was charging,
-        # hence the negative inverter power.
+        # hence the negative battery power. The inverter reading is the whole
+        # AC side, solar included, which is why it is the smaller number.
         ("sensor.flexio_solar_production", 1160.6, UnitOfPower.WATT),
-        ("sensor.flexio_inverter_power", -2456.2, UnitOfPower.WATT),
+        ("sensor.flexio_battery_power", -3616.8, UnitOfPower.WATT),
+        ("sensor.flexio_inverter_power_total_ac", -2456.2, UnitOfPower.WATT),
         # Consumption and grid import are negative in the API's load
         # convention and must come out positive.
         ("sensor.flexio_household_consumption", 3002.1, UnitOfPower.WATT),
@@ -167,9 +166,7 @@ async def test_entities_become_unavailable(
         ("sensor.flexio_electricity_price", 0.168, "€/kWh"),
     ],
 )
-async def test_sensor_values(
-    hass, init_integration, entity_id, expected, unit
-) -> None:
+async def test_sensor_values(hass, init_integration, entity_id, expected, unit) -> None:
     """Values are reported in watts, with grid and load normalised."""
     state = hass.states.get(entity_id)
     assert state is not None, f"{entity_id} was not created"

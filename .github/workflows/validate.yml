@@ -37,8 +37,8 @@ jobs:
         with:
           args: format --check --diff
 
-  diagram:
-    name: diagram is up to date
+  generated:
+    name: generated files are up to date
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -46,8 +46,9 @@ jobs:
         with:
           python-version: "3.13"
       - run: python3 scripts/make_diagram.py
-      - name: Fail if the committed SVGs differ from the generator
-        run: git diff --exit-code -- docs/
+      - run: python3 scripts/make_dashboard.py
+      - name: Fail if the committed files differ from their generators
+        run: git diff --exit-code -- docs/ dashboards/
 
   tests:
     name: pytest

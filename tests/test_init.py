@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+from homeassistant.config_entries import ConfigEntryState
 import pytest
 
 from custom_components.lifepowr.api import FlexioConnectionError, FlexioResponseError
-from homeassistant.config_entries import ConfigEntryState
 
 
 async def test_setup_and_unload(hass, init_integration) -> None:
@@ -17,9 +17,7 @@ async def test_setup_and_unload(hass, init_integration) -> None:
     assert init_integration.state is ConfigEntryState.NOT_LOADED
 
 
-@pytest.mark.parametrize(
-    "side_effect", [FlexioConnectionError, FlexioResponseError]
-)
+@pytest.mark.parametrize("side_effect", [FlexioConnectionError, FlexioResponseError])
 async def test_setup_retries_when_box_unavailable(
     hass, mock_config_entry, mock_client, side_effect
 ) -> None:

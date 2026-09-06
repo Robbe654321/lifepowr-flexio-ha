@@ -32,15 +32,32 @@
       "reconfigure_successful": "Herconfiguratie geslaagd"
     }
   },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Polling",
+        "description": "Hoe vaak de FlexiObox uitgelezen wordt. Hij antwoordt in milliseconden en staat op je eigen netwerk, dus een paar seconden kan gerust. Sneller pollen betekent wel meer states in je database.",
+        "data": {
+          "scan_interval": "Poll-interval"
+        },
+        "data_description": {
+          "scan_interval": "Seconden tussen metingen. Standaard 10, minimum 2. De FlexiO-app zelf ververst ook om de paar seconden."
+        }
+      }
+    }
+  },
   "entity": {
     "number": {
-      "generic_load_max_price": { "name": "Maximumprijs generieke last" }
+      "generic_load_max_price": {
+        "name": "Maximumprijs generieke last"
+      }
     },
     "sensor": {
       "pv_power": { "name": "Zonneproductie" },
       "load_power": { "name": "Verbruik woning" },
       "grid_power": { "name": "Netvermogen" },
-      "inverter_power": { "name": "Omvormervermogen" },
+      "battery_power": { "name": "Batterijvermogen" },
+      "inverter_power": { "name": "Omvormervermogen (totaal AC)" },
       "power_setpoint": { "name": "Setpoint omvormer" },
       "generic_load_power": { "name": "Beschikbaar vermogen generieke last" },
       "battery_soc": { "name": "Laadtoestand batterij" },

@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
-from custom_components.lifepowr.api import FlexioConnectionError, FlexioValueError
 from homeassistant.components.number import (
     ATTR_VALUE,
     DOMAIN as NUMBER_DOMAIN,
@@ -12,6 +9,9 @@ from homeassistant.components.number import (
 )
 from homeassistant.const import ATTR_ENTITY_ID
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
+import pytest
+
+from custom_components.lifepowr.api import FlexioConnectionError, FlexioValueError
 
 ENTITY_ID = "number.flexio_generic_load_maximum_price"
 

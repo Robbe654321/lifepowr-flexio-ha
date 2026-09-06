@@ -54,7 +54,7 @@ Sample taken while the house drew 3 kW and the battery charged at 3.5 kW:
 | `totalPVPowerFiltered` | 1160.6 | W | positive = producing |
 | `LoadPowerFiltered` | −3002.1 | W | negative = consuming |
 | `MeterPowerFiltered` | −5341.3 | W | negative = importing |
-| `TotalInvPowerFiltered` | −2456.2 | W | negative = charging |
+| `TotalInvPowerFiltered` | −2456.2 | W | negative = charging; **includes PV** |
 | `batteryVoltageInvFiltered` | 421.4 | V | |
 | `batteryCurrentInvFiltered` | −8.31 | A | negative = charging |
 | `stateOfChargeFiltered` | 18.68 | % | |
@@ -64,6 +64,30 @@ Sample taken while the house drew 3 kW and the battery charged at 3.5 kW:
 
 Values are unrounded floats; `stateOfHealthFiltered` came back as
 `100.00000000029866`.
+
+## TotalInvPowerFiltered is not the battery
+
+The name suggests the inverter, and that is exactly what it is: the inverter's
+**total** AC power, with the solar production already in it. It is not the
+battery's own flow.
+
+```
+battery = TotalInvPowerFiltered - totalPVPowerFiltered
+```
+
+Two confirmations. The vendor app, at a moment it showed 132 W solar and
+11592 W battery, adds up to 11724 W of inverter, and 11724 − 2293 W of house
+load is exactly the 9431 W the app showed going to the grid. And in the sample
+above, `-2456.2 - 1160.6 = -3616.8 W`, against a measured DC side of
+`421.4 V x -8.31 A = -3502 W` — the same figure, minus conversion loss.
+
+Getting this wrong is expensive and quiet: on a sunny day the inverter is
+positive because solar is flowing out, so anything that treats it as the
+battery records a discharge that never happened. It shows up as a battery that
+has delivered many times more energy than it ever absorbed.
+
+The integration derives `battery_power` and exposes it as its own sensor. Use
+that for charge/discharge accounting, never the inverter reading.
 
 ## Deriving the units and signs
 
@@ -91,8 +115,10 @@ would be drawing more than a small town.
 - Reports watts.
 - Negates `MeterPowerFiltered` and `LoadPowerFiltered` so grid import and
   household consumption are positive, matching Home Assistant convention.
-- Leaves `TotalInvPowerFiltered` alone — positive already means discharging,
-  which is what Home Assistant's battery handling expects.
+- Derives `battery_power` as `inverter - PV` and exposes it separately. The
+  raw inverter reading stays available as "Inverter power (total AC)".
+- Keeps the battery's raw sign — positive already means discharging, which is
+  what Home Assistant's battery handling expects.
 - Matches field names case- and separator-insensitively, so a firmware that
   renames `TotalInvPowerFiltered` to `total_inv_power_filtered` still works.
 - Treats a timestamp above 1e11 as milliseconds and below it as seconds.

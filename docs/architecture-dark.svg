@@ -22,18 +22,20 @@
 <text x="366" y="252" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#e6edf3">spelling-insensitive</text>
 <text x="366" y="282" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="600" fill="#3fb950">Reports watts, not kW</text>
 <text x="366" y="302" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="600" fill="#3fb950">Flips grid + load sign</text>
-<text x="366" y="332" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#9198a1">polls every 15 s</text>
+<text x="366" y="322" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="600" fill="#3fb950">Derives battery = inv − PV</text>
+<text x="366" y="352" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#9198a1">polls every 10 s, tunable</text>
 <rect x="672" y="92" width="244" height="268" rx="10" fill="#161b22" stroke="#3d444d"/>
 <text x="690" y="124" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="15" font-weight="600" fill="#e6edf3">Home Assistant</text>
 <text x="690" y="144" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11.5" fill="#9198a1">one device, real entities</text>
 <line x1="690" y1="158" x2="898" y2="158" stroke="#3d444d"/>
-<text x="690" y="182" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#e6edf3">12 sensors</text>
+<text x="690" y="182" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#e6edf3">13 sensors</text>
 <text x="690" y="202" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#9198a1">solar · load · grid · battery</text>
-<text x="690" y="222" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#9198a1">price · SoC · SoH · V · A</text>
-<text x="690" y="252" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#e6edf3">6 kWh totals</text>
-<text x="690" y="272" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#9198a1">integrated from the watts</text>
-<text x="690" y="302" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#e6edf3">1 number</text>
-<text x="690" y="322" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#9198a1">generic load price cap</text>
+<text x="690" y="222" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#9198a1">inverter · price · SoC · SoH</text>
+<text x="690" y="242" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#9198a1">battery V · A</text>
+<text x="690" y="272" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#e6edf3">6 kWh totals</text>
+<text x="690" y="292" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#9198a1">integrated from the watts</text>
+<text x="690" y="322" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#e6edf3">1 number</text>
+<text x="690" y="342" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#9198a1">generic load price cap</text>
 <path d="M276 226.0 H332" stroke="#6e7681" stroke-width="1.5" fill="none" marker-end="url(#a)"/>
 <path d="M600 226.0 H656" stroke="#6e7681" stroke-width="1.5" fill="none" marker-end="url(#a)"/>
 <path d="M794 354 V382 H146 V366" stroke="#d29922" stroke-width="1.5" stroke-dasharray="4 4" fill="none" marker-end="url(#w)"/>

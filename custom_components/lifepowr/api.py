@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 from enum import StrEnum
+from typing import Final
 
 from aiohttp import ClientError, ClientResponseError, ClientSession
 
@@ -17,6 +18,7 @@ from .parsing import (  # noqa: F401  (re-exported for entity platforms)
     FIELD_ALIASES,
     FIELD_NEW_MAX_PRICE,
     KEY_BATTERY_CURRENT,
+    KEY_BATTERY_POWER,
     KEY_BATTERY_SOC,
     KEY_BATTERY_SOH,
     KEY_BATTERY_VOLTAGE,
@@ -35,11 +37,19 @@ from .parsing import (  # noqa: F401  (re-exported for entity platforms)
     PATH_LEGACY_LOAD_CONTROL,
     PATH_MEASUREMENTS,
     PATH_VERSION,
+    apply_derived,
     coerce_value,
     normalise_name,
     normalise_timestamp,
     parse_payload,
 )
+
+#: The box answers a value it will not accept with a plain 400.
+_HTTP_BAD_REQUEST: Final = 400
+
+#: Statuses that mean "this firmware does not serve that path", rather than a
+#: transport failure. Some firmwares answer an unknown endpoint with a 500.
+_HTTP_TREAT_AS_ABSENT: Final = frozenset({404, 500})
 
 
 class FlexioError(Exception):
@@ -109,9 +119,9 @@ class FlexioClient:
         try:
             async with asyncio.timeout(REQUEST_TIMEOUT):
                 response = await self._session.request(method, url, json=json)
-                if response.status == 400:
+                if response.status == _HTTP_BAD_REQUEST:
                     raise FlexioValueError(f"{url} rejected the value")
-                if response.status in (404, 500):
+                if response.status in _HTTP_TREAT_AS_ABSENT:
                     raise FlexioResponseError(f"{url} returned {response.status}")
                 response.raise_for_status()
                 # The box has been observed serving JSON as text/plain, and
@@ -179,12 +189,14 @@ class FlexioClient:
 
     async def _async_fetch_device_info(self) -> None:
         """Collect software version and converter type, if exposed."""
-        if isinstance(payload := await self._try_get(PATH_VERSION), dict):
-            if version := payload.get("version"):
-                self.version = str(version)
-        if isinstance(payload := await self._try_get(PATH_CONVERTER), dict):
-            if converter := payload.get("converter"):
-                self.converter = str(converter)
+        if isinstance(payload := await self._try_get(PATH_VERSION), dict) and (
+            version := payload.get("version")
+        ):
+            self.version = str(version)
+        if isinstance(payload := await self._try_get(PATH_CONVERTER), dict) and (
+            converter := payload.get("converter")
+        ):
+            self.converter = str(converter)
 
     async def async_get_data(self) -> dict[str, float]:
         """Return all currently available measurements."""
@@ -214,7 +226,7 @@ class FlexioClient:
 
         if not data:
             raise FlexioResponseError("Box returned no known measurements")
-        return data
+        return apply_derived(data)
 
     async def _async_get_data_per_field(self) -> dict[str, float]:
         """Fetch every measurement from its own endpoint."""
@@ -232,7 +244,7 @@ class FlexioClient:
                 data[key] = value
         if not data:
             raise FlexioResponseError("Box returned no known measurements")
-        return data
+        return apply_derived(data)
 
     async def async_set_generic_load_max_price(self, price: float) -> float | None:
         """Set the generic load's maximum electricity price.

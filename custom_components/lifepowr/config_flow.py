@@ -4,19 +4,35 @@ from __future__ import annotations
 
 from typing import Any
 
-import voluptuous as vol
-
-from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
-from homeassistant.const import CONF_HOST
+from homeassistant.config_entries import (
+    ConfigEntry,
+    ConfigFlow,
+    ConfigFlowResult,
+    OptionsFlow,
+)
+from homeassistant.const import CONF_HOST, CONF_SCAN_INTERVAL
+from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
+    NumberSelector,
+    NumberSelectorConfig,
+    NumberSelectorMode,
     TextSelector,
     TextSelectorConfig,
     TextSelectorType,
 )
+import voluptuous as vol
 
 from .api import FlexioClient, FlexioConnectionError, FlexioError
-from .const import DEFAULT_HOST, DEFAULT_NAME, DOMAIN, LOGGER
+from .const import (
+    DEFAULT_HOST,
+    DEFAULT_NAME,
+    DEFAULT_SCAN_INTERVAL,
+    DOMAIN,
+    LOGGER,
+    MAX_SCAN_INTERVAL,
+    MIN_SCAN_INTERVAL,
+)
 
 STEP_USER_DATA_SCHEMA = vol.Schema(
     {
@@ -27,10 +43,31 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
 )
 
 
+OPTIONS_SCHEMA = vol.Schema(
+    {
+        vol.Required(CONF_SCAN_INTERVAL, default=DEFAULT_SCAN_INTERVAL): NumberSelector(
+            NumberSelectorConfig(
+                min=MIN_SCAN_INTERVAL,
+                max=MAX_SCAN_INTERVAL,
+                step=1,
+                mode=NumberSelectorMode.BOX,
+                unit_of_measurement="s",
+            )
+        )
+    }
+)
+
+
 class FlexioConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for LIFEPOWR FlexiO."""
 
     VERSION = 1
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry: ConfigEntry) -> FlexioOptionsFlow:
+        """Return the options flow."""
+        return FlexioOptionsFlow()
 
     async def _async_validate(self, host: str) -> str | None:
         """Return an error key, or None when the host is a working FlexiObox."""
@@ -41,7 +78,7 @@ class FlexioConfigFlow(ConfigFlow, domain=DOMAIN):
             return "cannot_connect"
         except FlexioError:
             return "invalid_response"
-        except Exception:  # noqa: BLE001
+        except Exception:
             LOGGER.exception("Unexpected error validating %s", host)
             return "unknown"
         return None
@@ -96,4 +133,24 @@ class FlexioConfigFlow(ConfigFlow, domain=DOMAIN):
             ),
             errors=errors,
             description_placeholders={"default_host": DEFAULT_HOST},
+        )
+
+
+class FlexioOptionsFlow(OptionsFlow):
+    """Let the user trade network chatter for resolution."""
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Manage the poll interval."""
+        if user_input is not None:
+            return self.async_create_entry(
+                data={CONF_SCAN_INTERVAL: int(user_input[CONF_SCAN_INTERVAL])}
+            )
+
+        return self.async_show_form(
+            step_id="init",
+            data_schema=self.add_suggested_values_to_schema(
+                OPTIONS_SCHEMA, self.config_entry.options
+            ),
         )

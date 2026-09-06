@@ -22,14 +22,14 @@ from datetime import datetime
 import importlib.util
 import json
 from pathlib import Path
+from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 # Load parsing.py by path: importing the package would pull in Home Assistant.
 _SPEC = importlib.util.spec_from_file_location(
     "lifepowr_parsing",
-    Path(__file__).resolve().parent.parent
-    / "custom_components/lifepowr/parsing.py",
+    Path(__file__).resolve().parent.parent / "custom_components/lifepowr/parsing.py",
 )
 _P = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(_P)
@@ -48,6 +48,8 @@ PATH_LEGACY_EMS = _P.PATH_LEGACY_EMS
 PATH_LEGACY_LOAD_CONTROL = _P.PATH_LEGACY_LOAD_CONTROL
 PATH_MEASUREMENTS = _P.PATH_MEASUREMENTS
 PATH_VERSION = _P.PATH_VERSION
+KEY_BATTERY_POWER = _P.KEY_BATTERY_POWER
+apply_derived = _P.apply_derived
 normalise_timestamp = _P.normalise_timestamp
 parse_payload = _P.parse_payload
 
@@ -57,7 +59,9 @@ BAD = "\033[31m✗\033[0m"
 WARN = "\033[33m!\033[0m"
 
 
-def fetch(base: str, path: str, body: dict[str, float] | None = None):
+def fetch(
+    base: str, path: str, body: dict[str, float] | None = None
+) -> tuple[Any, str | None]:
     """GET or POST a path; return (payload, error_string)."""
     url = f"{base}/{path}"
     data = json.dumps(body).encode() if body is not None else None
@@ -78,6 +82,7 @@ def fetch(base: str, path: str, body: dict[str, float] | None = None):
 
 
 def main() -> int:
+    """Probe the box and print a report; return a shell exit status."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("host", nargs="?", default="myio.local")
     parser.add_argument(
@@ -126,6 +131,7 @@ def main() -> int:
         load = parse_payload(generic)
         load.pop(KEY_TIMESTAMP, None)
         data |= load
+    apply_derived(data)
 
     # --- Field mapping ---------------------------------------------------
     print("\nRecognised fields")
@@ -176,13 +182,18 @@ def main() -> int:
         age = (datetime.now().astimezone() - when).total_seconds()
         unit = "ms" if stamp > 1e11 else "s"
         mark = OK if -60 < age < 3600 else BAD
-        print(f"  {mark} timestamp {stamp} ({unit}) -> {when:%Y-%m-%d %H:%M:%S}"
-              f", {age:.0f}s old")
+        print(
+            f"  {mark} timestamp {stamp} ({unit}) -> {when:%Y-%m-%d %H:%M:%S}"
+            f", {age:.0f}s old"
+        )
 
     grid = data.get(KEY_GRID_POWER)
     inverter = data.get(KEY_INVERTER_POWER)
     load = data.get(KEY_LOAD_POWER)
     pv = data.get(KEY_PV_POWER)
+    # Derived by apply_derived above: the inverter reading includes solar, so
+    # the battery's own flow is what is left after subtracting PV.
+    battery = data.get(KEY_BATTERY_POWER)
 
     # Units: the website documentation claims kW; real firmware reports W.
     magnitudes = [abs(v) for v in (grid, load, pv, inverter) if v]
@@ -231,12 +242,15 @@ def main() -> int:
                 " This firmware may not use the load convention;"
                 " please report it, the sensors will read inverted."
             )
-    print(
-        f"\n  After conversion Home Assistant will show: grid"
-        f" {-grid:.0f} W ({'importing' if grid and grid < 0 else 'exporting'}),"
-        f" consumption {-load:.0f} W, solar {pv:.0f} W, battery"
-        f" {inverter:.0f} W ({'charging' if inverter and inverter < 0 else 'discharging'})."
-    )
+    if None not in (grid, load, pv, battery):
+        flow = "charging" if battery < 0 else "discharging"
+        print(
+            f"\n  After conversion Home Assistant will show: grid"
+            f" {-grid:.0f} W ({'importing' if grid < 0 else 'exporting'}),"
+            f" consumption {-load:.0f} W, solar {pv:.0f} W,"
+            f" battery {battery:.0f} W ({flow}),"
+            f" inverter total AC {inverter:.0f} W."
+        )
 
     # --- Optional write --------------------------------------------------
     if args.set_max_price is not None:

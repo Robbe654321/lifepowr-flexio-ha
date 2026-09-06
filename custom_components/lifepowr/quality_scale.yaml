@@ -3,7 +3,7 @@ rules:
   action-setup:
     status: exempt
     comment: The integration registers no service actions.
-  appropriate-polling: done
+  appropriate-polling: done  # 10 s default, configurable 2-300 s
   brands: todo
   common-modules: done
   config-flow-test-coverage: done
@@ -30,9 +30,7 @@ rules:
   # Silver
   action-exceptions: done
   config-entry-unloading: done
-  docs-configuration-parameters:
-    status: exempt
-    comment: The integration has no options flow.
+  docs-configuration-parameters: done
   docs-installation-parameters: done
   entity-unavailable: done
   integration-owner: done

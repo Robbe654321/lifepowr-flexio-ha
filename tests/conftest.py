@@ -5,13 +5,12 @@ from __future__ import annotations
 from collections.abc import Generator
 from unittest.mock import AsyncMock, patch
 
+from homeassistant.const import CONF_HOST
 import pytest
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.lifepowr.api import Layout
 from custom_components.lifepowr.const import DOMAIN
-from homeassistant.const import CONF_HOST
-
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 pytest_plugins = "pytest_homeassistant_custom_component"
 
@@ -30,6 +29,7 @@ SAMPLE_DATA = {
     "load_power": -3002.070671301206,
     "grid_power": -5341.344422408456,
     "inverter_power": -2456.2038037467037,
+    "battery_power": -3616.8218661111573,  # inverter - pv
     "generic_load_power": 2811.2092604513246,
     "battery_soc": 18.684592614842874,
     "battery_soh": 100.00000000029866,

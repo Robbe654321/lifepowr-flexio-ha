@@ -32,15 +32,32 @@
       "reconfigure_successful": "Reconfiguration was successful"
     }
   },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Polling",
+        "description": "How often to read the FlexiObox. It answers in milliseconds and is on your own network, so a few seconds is fine. Faster polling means more states recorded in your database.",
+        "data": {
+          "scan_interval": "Poll interval"
+        },
+        "data_description": {
+          "scan_interval": "Seconds between readings. Default 10, minimum 2. The FlexiO app itself refreshes every few seconds."
+        }
+      }
+    }
+  },
   "entity": {
     "number": {
-      "generic_load_max_price": { "name": "Generic load maximum price" }
+      "generic_load_max_price": {
+        "name": "Generic load maximum price"
+      }
     },
     "sensor": {
       "pv_power": { "name": "Solar production" },
       "load_power": { "name": "Household consumption" },
       "grid_power": { "name": "Grid power" },
-      "inverter_power": { "name": "Inverter power" },
+      "battery_power": { "name": "Battery power" },
+      "inverter_power": { "name": "Inverter power (total AC)" },
       "power_setpoint": { "name": "Inverter setpoint" },
       "generic_load_power": { "name": "Generic load available power" },
       "battery_soc": { "name": "Battery state of charge" },
