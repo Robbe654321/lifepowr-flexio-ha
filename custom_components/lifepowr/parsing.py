@@ -73,6 +73,11 @@ FIELD_NEW_MAX_PRICE: Final = "newMaxPrice"
 #: Epoch values above this are milliseconds rather than seconds.
 _MS_THRESHOLD: Final = 1e11
 
+#: How far to descend into a nested document looking for known fields. Deep
+#: enough for a ``{"ems": {...}}`` style envelope, shallow enough not to walk
+#: an entire unexpected payload.
+_MAX_WALK_DEPTH: Final = 3
+
 
 def normalise_name(name: str) -> str:
     """Reduce a field name to a comparable form."""
@@ -146,7 +151,7 @@ def parse_payload(payload: Any) -> dict[str, float]:
     result: dict[str, float] = {}
 
     def _walk(node: Any, depth: int) -> None:
-        if depth > 3 or not isinstance(node, dict):
+        if depth > _MAX_WALK_DEPTH or not isinstance(node, dict):
             return
         for raw_name, raw_value in node.items():
             key = ALIAS_LOOKUP.get(normalise_name(str(raw_name)))
