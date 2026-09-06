@@ -16,7 +16,9 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["ANN", "D", "PLR2004"]
+# Fixtures compose freely, and a test that needs six of them is clearer
+# than one that hides half behind a helper.
+"tests/*" = ["ANN", "D", "PLR2004", "PLR0913"]
 # The scripts are standalone developer tools, not part of the integration.
 # Printing is how they report, their thresholds read better inline than as
 # named constants, and check_box's report is one deliberately linear pass.

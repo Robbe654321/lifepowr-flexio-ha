@@ -13,10 +13,10 @@ from custom_components.lifepowr.learning import (
     FitQuality,
     PowerSample,
     SolarModel,
+    _prepare,
     fit,
     nnls,
     select_clear_intervals,
-    _prepare,
 )
 
 LAT, LON, ALT = 51.05, 3.72, 10.0
@@ -29,6 +29,7 @@ def synthesise(
     cloudiness: float = 0.55,
     noise: float = 0.02,
     ac_limit: float | None = None,
+    horizon: solar.Horizon | None = None,
 ) -> list[PowerSample]:
     """Return a year of hourly production from a roof we choose ourselves.
 
@@ -48,6 +49,7 @@ def synthesise(
         quality=FitQuality(0, 0, 0.0, 0.0, 0.0, 0.0),
         created=datetime(2024, 1, 1, tzinfo=UTC),
         temperature_coefficient=0.0,
+        horizon=horizon or solar.Horizon.flat(),
     )
     samples: list[PowerSample] = []
     start = datetime(2024, 1, 1, tzinfo=UTC)
@@ -92,7 +94,7 @@ def test_nnls_recovers_a_non_negative_combination() -> None:
     columns = [[rng.random() for _ in range(40)] for _ in range(5)]
     truth = [2.0, 0.0, 1.5, 0.0, 3.0]
     target = [
-        sum(column[row] * weight for column, weight in zip(columns, truth))
+        sum(column[row] * weight for column, weight in zip(columns, truth, strict=True))
         for row in range(40)
     ]
     assert nnls(columns, target) == pytest.approx(truth, abs=1e-6)
@@ -102,8 +104,9 @@ def test_nnls_never_returns_a_negative_weight() -> None:
     """Capacity cannot be negative, and that is the whole point."""
     rng = random.Random(2)
     columns = [[rng.random() for _ in range(40)] for _ in range(5)]
+    truth = [2.0, -3.0, 1.0, 0.0, 1.0]
     target = [
-        sum(column[row] * weight for column, weight in zip(columns, [2.0, -3.0, 1.0, 0.0, 1.0]))
+        sum(column[row] * weight for column, weight in zip(columns, truth, strict=True))
         for row in range(40)
     ]
     assert all(weight >= 0.0 for weight in nnls(columns, target))
@@ -184,7 +187,7 @@ def test_model_survives_a_round_trip_through_storage() -> None:
     # unchanged even though it is not bit-identical to the fitted model.
     assert restored.as_dict() == stored
     assert len(restored.arrays) == len(model.arrays)
-    for saved, original in zip(restored.arrays, model.arrays):
+    for saved, original in zip(restored.arrays, model.arrays, strict=True):
         assert saved.tilt == pytest.approx(original.tilt, abs=0.05)
         assert saved.azimuth == pytest.approx(original.azimuth, abs=0.05)
         assert saved.peak_power == pytest.approx(original.peak_power, abs=0.05)
@@ -204,3 +207,53 @@ def test_orientation_reads_as_a_compass_bearing() -> None:
     """The description is for humans reading a dashboard."""
     assert "S" in Array(tilt=35.0, azimuth=180.0, peak_power=1.0).orientation
     assert "W" in Array(tilt=35.0, azimuth=270.0, peak_power=1.0).orientation
+
+
+def test_finds_the_trees_in_front_of_the_panels() -> None:
+    """A skyline the panels cannot see past has to be recovered too.
+
+    Shading is invisible to tilt and azimuth: a fit denied a skyline explains
+    a missing evening by turning the panels east. So the obstruction has to be
+    found on its own, in the direction it actually stands.
+    """
+    # A stand of trees due west, and nothing anywhere else.
+    blocked = solar.Horizon((0.0,) * 8 + (25.0, 25.0) + (0.0,) * 2)
+    model = fit(
+        synthesise([(30.0, 180.0, 6000.0)], horizon=blocked, cloudiness=0.8),
+        LAT,
+        LON,
+        ALT,
+    )
+    assert model is not None
+    assert not model.horizon.is_flat
+    # The west is blocked and the east and south are not.
+    assert model.horizon.elevation_at(265.0) > 12.0
+    assert model.horizon.elevation_at(95.0) < 10.0
+    assert model.horizon.elevation_at(180.0) < 10.0
+
+
+def test_an_open_site_is_not_given_an_imaginary_skyline() -> None:
+    """Twelve free numbers can always flatter the days they were fitted on.
+
+    Held-out days are what stop them: an unobstructed roof has to come back
+    unobstructed, or every forecast inherits a hedge it did not earn.
+    """
+    model = fit(synthesise([(30.0, 180.0, 6000.0)], cloudiness=0.8), LAT, LON, ALT)
+    assert model is not None
+    assert max(model.horizon.elevations) < 10.0
+
+
+def test_a_skyline_survives_storage() -> None:
+    """It is part of the model, so it has to outlive a restart with it."""
+    blocked = solar.Horizon((0.0,) * 8 + (25.0, 25.0) + (0.0,) * 2)
+    model = fit(
+        synthesise([(30.0, 180.0, 6000.0)], horizon=blocked, cloudiness=0.8),
+        LAT,
+        LON,
+        ALT,
+    )
+    assert model is not None
+    restored = SolarModel.from_dict(model.as_dict())
+    assert restored.horizon.elevations == pytest.approx(
+        model.horizon.elevations, abs=0.05
+    )

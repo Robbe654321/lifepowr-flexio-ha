@@ -121,6 +121,18 @@ integrated from those power readings:
 | Battery charge energy | kWh | Battery power, while negative |
 | Battery discharge energy | kWh | Battery power, while positive |
 
+And, once the [solar forecast](#solar-forecast-that-learns-your-roof) is
+switched on, six more:
+
+| Entity | Unit | Notes |
+| --- | --- | --- |
+| Solar forecast now | W | Expected production this hour |
+| Solar forecast today | kWh | Local calendar day |
+| Solar forecast remaining today | kWh | From now until local midnight |
+| Solar forecast tomorrow | kWh | |
+| Solar forecast peak today | timestamp | When production should peak |
+| Learned solar capacity | W | Diagnostic; the roof it worked out |
+
 ## Units and sign convention
 
 Two things the vendor documentation gets wrong, both confirmed against real
@@ -278,6 +290,91 @@ cannot drift apart; CI fails if the committed files differ from the generator.
 That is the entire API. See [`docs/api-notes.md`](docs/api-notes.md) for how
 this differs from the published documentation.
 
+## Solar forecast that learns your roof
+
+Every solar forecast wants three numbers per plane of panels: the tilt, the
+compass bearing, and the peak power. Almost nobody knows them. The tilt is
+guessed from the pitch of the ceiling, the bearing off a map, the wattage from
+a label in the attic — and an installation that grew over time faces two or
+three directions at once, each with its own angle. Whatever you type in, the
+forecast inherits it.
+
+Your measurements already know. Every orientation leaves a distinctive
+fingerprint in the shape of a production curve: an east-facing plane peaks
+before solar noon and fades early, a west-facing one does the opposite, a
+steep plane earns its keep in December and loses in June. A roof with several
+planes produces the *sum* of those fingerprints. So the question can be turned
+around — which combination of orientations, weighted by capacity, reproduces
+the history this installation has already recorded?
+
+Switch it on under **Configure → Learn the roof and forecast production**. It
+reads the hourly production statistics your recorder has been keeping, works
+out the geometry overnight, and forecasts the coming days from the weather.
+Nothing to enter.
+
+### What it works out
+
+- **How many planes of panels there are**, and the tilt, compass bearing and
+  delivered capacity of each.
+- **What is standing in front of them.** Trees and a neighbour's gable take
+  the first and last hour of production away, and no tilt or azimuth can
+  express that. The skyline is learned separately, one height per compass
+  direction, because a fit denied one explains the missing evening by turning
+  the panels east instead.
+- **The inverter's ceiling**, so a forecast never predicts more than the
+  hardware can deliver.
+
+`sensor.flexio_learned_solar_capacity` is the diagnostic that shows the
+working: its state is the total learned capacity and its attributes list every
+plane, when the fit last ran, and how well it reproduces days that were held
+out of it.
+
+> **A learned capacity reads lower than the number on your panels, and should.**
+> It is *delivered AC power at 1000 W/m² on the panels themselves* — inverter
+> efficiency, wiring, soiling, mismatch and any permanent shading are already
+> inside it. On a real 14.3 kWp installation with trees around it, the fit
+> lands near 9 kW. That gap is not an error in the fit; it is the difference
+> between a label and a roof, and it is the reason a forecast built on the
+> label runs high.
+
+### Where the numbers come from
+
+Irradiance comes from [Open-Meteo](https://open-meteo.com/), free and without
+an API key — the measured past to learn from, the forecast future to predict
+with. This is the one part of the integration that leaves your network: your
+latitude and longitude go to Open-Meteo, nothing else.
+
+Without it the fit falls back on its own cloudless-sky model and keeps only
+the intervals that look cloudless. That works offline, and it is noticeably
+worse: on the installation this was developed against, measured irradiance
+lifted the score on held-out days from 0.69 to 0.82. The reason is that a
+clear-sky model has to guess how a cloudless sky splits between hard direct
+sunlight and the soft glow off the rest of the sky, and that split is exactly
+what tilt is read from.
+
+### Honest about what it cannot do
+
+- **It needs history.** Roughly a year is what pins the tilt down, because
+  tilt is read from how production changes with the seasons. It will fit with
+  less and say so through a lower held-out score. A brand-new installation has
+  nothing to learn from yet; it will start on its own once the recorder has
+  enough.
+- **Bearing is firmer than tilt.** Bearing follows from the time of day
+  production peaks, which is unambiguous. Tilt is entangled with how hazy the
+  sky is assumed to be, and the two can trade against each other.
+- **Several inverters are better than one.** The same roof read through two
+  meters is a strictly richer measurement than their sum, and is fitted
+  separately before the planes are pooled.
+- **It will not find planes that are not there.** How many planes a roof gets
+  is decided on days held out of the fit, so a second plane has to earn its
+  place. Two orientations less than about 60° apart usually cannot be told
+  apart from a single meter, and are reported as the one plane that fits.
+
+### Re-learning
+
+The fit runs nightly by itself. After adding panels, call
+`lifepowr.learn_solar_model` to redo it immediately rather than waiting.
+
 ## Data updates
 
 Polled every 10 seconds by default, configurable from 2 to 300 seconds. The API
@@ -337,7 +434,9 @@ version — the unit would then need to be detected rather than assumed.
   inverter itself cannot be commanded through this API. On firmware without
   `/api/ems/measurements` the `number` entity is not created at all, because
   the write endpoint does not exist there either.
-- **No history, no per-phase or per-string detail.**
+- **No history, no per-phase or per-string detail.** The learned solar
+  forecast works around the missing history by reading Home Assistant's own
+  recorder statistics, but the box itself still offers none.
 
 ## Removal
 

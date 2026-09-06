@@ -8,6 +8,7 @@ from unittest.mock import patch
 from homeassistant.const import CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ServiceValidationError
+from homeassistant.util import dt as dt_util
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -53,7 +54,7 @@ def _forecast_payload(start: datetime, hours: int = 48) -> dict:
 class _Recorder:
     """Stands in for the recorder instance, running its jobs inline."""
 
-    async def async_add_executor_job(self, target, *args):  # noqa: ANN002, ANN003
+    async def async_add_executor_job(self, target, *args):
         return target(*args)
 
 
@@ -103,7 +104,7 @@ def mock_history():
         for sample in samples
     ]
 
-    def _statistics(hass, start, end, statistic_ids, period, units, types):  # noqa: ANN001, ANN202
+    def _statistics(hass, start, end, statistic_ids, period, units, types):
         return {next(iter(statistic_ids)): rows}
 
     with (
@@ -142,8 +143,6 @@ async def init_solar(
 
 def _hour_floor() -> datetime:
     """Return the start of the current UTC hour."""
-    from homeassistant.util import dt as dt_util
-
     return dt_util.utcnow().replace(minute=0, second=0, microsecond=0) - timedelta(
         hours=1
     )
@@ -157,7 +156,9 @@ def _hour_floor() -> datetime:
 def test_energy_clips_partial_hours() -> None:
     """"The rest of today" has to mean exactly that, mid-hour included."""
     start = datetime(2024, 6, 21, 10, 0, tzinfo=UTC)
-    forecast = SolarForecast(hours=((start, 2000.0), (start + timedelta(hours=1), 4000.0)))
+    forecast = SolarForecast(
+        hours=((start, 2000.0), (start + timedelta(hours=1), 4000.0))
+    )
     assert forecast.energy(start, start + timedelta(hours=2)) == pytest.approx(6.0)
     assert forecast.energy(
         start + timedelta(minutes=30), start + timedelta(hours=2)
@@ -231,7 +232,7 @@ async def test_the_model_is_restored_after_a_restart(
     assert restored.created == learned.created
     # Storage rounds; the roof has to come back the same to within that.
     assert len(restored.arrays) == len(learned.arrays)
-    for saved, original in zip(restored.arrays, learned.arrays):
+    for saved, original in zip(restored.arrays, learned.arrays, strict=True):
         assert saved.tilt == pytest.approx(original.tilt, abs=0.05)
         assert saved.azimuth == pytest.approx(original.azimuth, abs=0.05)
         assert saved.peak_power == pytest.approx(original.peak_power, abs=0.05)

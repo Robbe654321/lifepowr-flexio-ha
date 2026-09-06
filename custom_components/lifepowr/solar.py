@@ -335,6 +335,21 @@ class Horizon:
         above = position.elevation - self.elevation_at(position.azimuth)
         return min(max(above / HORIZON_SOFTNESS, 0.0), 1.0)
 
+    def as_list(self) -> list[float]:
+        """Return the skyline as plain data for storage."""
+        return [round(value, 1) for value in self.elevations]
+
+
+def sector_weights(azimuth: float) -> tuple[int, float]:
+    """Return the sector below an azimuth and how far past it the azimuth sits.
+
+    Splitting the interpolation out this way lets a fit try thousands of
+    candidate skylines against one precomputed set of sun positions.
+    """
+    offset = (azimuth % 360.0) / _SECTOR_WIDTH - 0.5
+    lower = math.floor(offset)
+    return lower % HORIZON_SECTORS, offset - lower
+
 
 def incidence_angle(tilt: float, azimuth: float, position: SolarPosition) -> float:
     """Return the angle between the sun and a roof plane's normal, degrees."""
@@ -365,6 +380,18 @@ def incidence_angle_modifier(cos_aoi: float) -> float:
     return min(max(1.0 - _IAM_B0 * (1.0 / cos_aoi - 1.0), 0.0), 1.0)
 
 
+def beam_on_plane(
+    tilt: float, azimuth: float, position: SolarPosition, sky: Irradiance
+) -> float:
+    """Return the direct sunlight landing on a tilted plane, W/m².
+
+    Separate from :func:`plane_of_array` because it is the only part a
+    skyline blocks, and the fit needs to scale it on its own.
+    """
+    cos_aoi = max(_cos_incidence(tilt, azimuth, position), 0.0)
+    return sky.dni * cos_aoi * incidence_angle_modifier(cos_aoi)
+
+
 def plane_of_array(
     tilt: float,
     azimuth: float,
@@ -392,7 +419,7 @@ def plane_of_array(
     cos_zenith = max(position.cos_zenith, math.cos(math.radians(89.0)))
     tilt_rad = math.radians(tilt)
 
-    beam = sky.dni * cos_aoi * incidence_angle_modifier(cos_aoi)
+    beam = beam_on_plane(tilt, azimuth, position, sky)
     if horizon is not None:
         beam *= horizon.transmission(position)
 

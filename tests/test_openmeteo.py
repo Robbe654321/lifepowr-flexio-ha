@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, date, datetime, timedelta
 
 from aiohttp import ClientError
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 import pytest
 
 from custom_components.lifepowr.openmeteo import (
@@ -130,6 +131,4 @@ async def test_an_unreachable_service_is_reported(hass, aioclient_mock) -> None:
 
 def _session(hass):
     """Return the shared aiohttp session."""
-    from homeassistant.helpers.aiohttp_client import async_get_clientsession
-
     return async_get_clientsession(hass)

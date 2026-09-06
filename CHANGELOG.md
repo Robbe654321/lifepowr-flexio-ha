@@ -6,6 +6,38 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-09-06
+
+### Added
+
+- **A solar forecast that works the roof out for itself.** Tilt, compass
+  bearing and peak power per plane of panels are what every solar forecast
+  asks for and almost nobody knows, and an installation that grew over time
+  faces several directions at once. These are now recovered from the hourly
+  production statistics the recorder already holds, by asking which
+  combination of candidate orientations reproduces the measured history — a
+  non-negative least squares problem, whose solution is naturally sparse, so
+  only the orientations really on the roof survive.
+
+  Shading is learned alongside the panels: one skyline height per compass
+  direction, because a fit denied a skyline explains a missing evening by
+  turning the panels east instead.
+
+  How many planes a roof gets, and whether a skyline earns its place, are
+  decided on days held out of the fit rather than on how well they flatter the
+  days they were fitted on.
+
+- Six sensors: expected production now, today, the rest of today, tomorrow,
+  when today should peak, and a diagnostic that shows the learned roof with
+  the quality of the fit.
+- `lifepowr.learn_solar_model`, to redo the fit immediately after adding
+  panels rather than waiting for the nightly run.
+- Irradiance from [Open-Meteo](https://open-meteo.com/), free and without an
+  API key. It is the only part of the integration that leaves the local
+  network, it is opt-in with the forecast, and it sends nothing but the
+  site's coordinates. Without it the fit falls back on its own cloudless-sky
+  model, which works offline and scores measurably worse.
+
 ## [0.2.1] — 2026-09-06
 
 ### Fixed
@@ -101,7 +133,8 @@ The API also signs consumption negative. Grid power and household consumption
 are negated so they read positively in Home Assistant; battery flow keeps its
 raw sign, where positive already means discharging.
 
-[Unreleased]: https://github.com/Robbe654321/lifepowr-flexio-ha/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/Robbe654321/lifepowr-flexio-ha/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/Robbe654321/lifepowr-flexio-ha/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/Robbe654321/lifepowr-flexio-ha/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/Robbe654321/lifepowr-flexio-ha/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Robbe654321/lifepowr-flexio-ha/releases/tag/v0.1.0

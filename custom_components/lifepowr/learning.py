@@ -45,12 +45,17 @@ from typing import Any, Final
 
 from .solar import (
     DEFAULT_ALBEDO,
+    HORIZON_SECTORS,
+    HORIZON_SOFTNESS,
+    Horizon,
     Irradiance,
     SolarPosition,
+    beam_on_plane,
     clear_sky,
     compass_point,
     linke_turbidity,
     plane_of_array,
+    sector_weights,
     solar_position,
 )
 
@@ -76,6 +81,9 @@ COARSE_AZIMUTHS: Final = tuple(float(a) for a in range(45, 316, 15))
 MERGE_TILT: Final = 22.0
 MERGE_AZIMUTH: Final = 35.0
 
+#: An unobstructed skyline, shared because it is immutable.
+NO_HORIZON: Final = Horizon.flat()
+
 #: A plane this shallow points nowhere in particular, so only its tilt decides
 #: whether it is the same roof as another.
 FLAT_TILT: Final = 8.0
@@ -97,6 +105,15 @@ KEEP_RATIO: Final = 0.85
 
 #: A comparison group smaller than this cannot support a quantile.
 MIN_GROUP: Final = 4
+
+#: Share of a measured sky arriving as direct beam above which the hour counts
+#: as genuinely cloudless. Overcast drives this to zero; a clear sky sits near
+#: 0.75. Used only to decide which hours a model is *judged* on, never which
+#: hours it learns from.
+CLEAR_BEAM_FRACTION: Final = 0.6
+
+#: Below this there is too little light for the ratio above to mean anything.
+MIN_JUDGING_GHI: Final = 100.0
 
 #: Alternating rounds of "select the clear intervals, then refit".
 REFINEMENT_ROUNDS: Final = 3
@@ -254,6 +271,9 @@ class SolarModel:
     ac_limit: float | None = None
     temperature_coefficient: float = DEFAULT_TEMPERATURE_COEFFICIENT
     albedo: float = DEFAULT_ALBEDO
+    #: Learned skyline: how high trees and neighbouring roofs stand in each
+    #: compass direction. Flat when nothing was found, or nothing was needed.
+    horizon: Horizon = NO_HORIZON
 
     @property
     def peak_power(self) -> float:
@@ -290,7 +310,12 @@ class SolarModel:
         total = 0.0
         for array in self.arrays:
             poa = plane_of_array(
-                array.tilt, array.azimuth, position, sky, albedo=self.albedo
+                array.tilt,
+                array.azimuth,
+                position,
+                sky,
+                albedo=self.albedo,
+                horizon=self.horizon,
             )
             total += array.peak_power * poa / 1000.0 * _derate(
                 poa, temperature, self.temperature_coefficient
@@ -309,6 +334,7 @@ class SolarModel:
             "ac_limit": self.ac_limit,
             "temperature_coefficient": self.temperature_coefficient,
             "albedo": self.albedo,
+            "horizon": self.horizon.as_list(),
         }
 
     @classmethod
@@ -328,6 +354,12 @@ class SolarModel:
                 data.get("temperature_coefficient", DEFAULT_TEMPERATURE_COEFFICIENT)
             ),
             albedo=float(data.get("albedo", DEFAULT_ALBEDO)),
+            horizon=(
+                Horizon(tuple(float(value) for value in stored))
+                if (stored := data.get("horizon"))
+                and len(stored) == HORIZON_SECTORS
+                else NO_HORIZON
+            ),
         )
 
 
@@ -472,6 +504,9 @@ class _Interval:
     clear_ghi: float
     #: Group used to compare like with like when no measured sky is available.
     group: tuple[int, int]
+    #: Share of the measured sky that arrived as direct beam, or None when the
+    #: sky was modelled rather than measured.
+    beam_fraction: float | None
 
 
 def _prepare(
@@ -504,12 +539,18 @@ def _prepare(
         if not points or clear_ghi <= 1.0:
             continue
         middle = sample.start + span / 2
+        measured = sample.sky
         prepared.append(
             _Interval(
                 sample=sample,
                 points=tuple(points),
                 clear_ghi=clear_ghi,
                 group=(middle.month, middle.hour),
+                beam_fraction=(
+                    (measured.ghi - measured.dhi) / measured.ghi
+                    if measured is not None and measured.ghi > MIN_JUDGING_GHI
+                    else None
+                ),
             )
         )
     return prepared
@@ -521,6 +562,7 @@ def _column(
     intervals: Sequence[_Interval],
     albedo: float,
     coefficient: float,
+    horizon: Horizon | None = None,
 ) -> list[float]:
     """Return one candidate orientation's yield per watt-peak, per interval."""
     column: list[float] = []
@@ -528,7 +570,9 @@ def _column(
         total = 0.0
         temperature = interval.sample.temperature
         for position, sky, weight in interval.points:
-            poa = plane_of_array(tilt, azimuth, position, sky, albedo=albedo)
+            poa = plane_of_array(
+                tilt, azimuth, position, sky, albedo=albedo, horizon=horizon
+            )
             total += weight * poa * _derate(poa, temperature, coefficient)
         column.append(total / 1000.0)
     return column
@@ -670,6 +714,7 @@ def _refine(
     target: Sequence[float],
     albedo: float,
     coefficient: float,
+    horizon: Horizon | None = None,
 ) -> tuple[list[tuple[float, float]], list[float], float]:
     """Polish the plane angles off the dictionary grid by pattern search.
 
@@ -687,7 +732,9 @@ def _refine(
     def column_for(tilt: float, azimuth: float) -> list[float]:
         key = (round(tilt, 2), round(azimuth, 2) % 360.0)
         if key not in cache:
-            cache[key] = _column(key[0], key[1], intervals, albedo, coefficient)
+            cache[key] = _column(
+                key[0], key[1], intervals, albedo, coefficient, horizon
+            )
         return cache[key]
 
     def score(trial: Sequence[tuple[float, float]]) -> tuple[float, list[float]]:
@@ -727,6 +774,12 @@ def _refine(
 #: Below this many cloudless intervals a source has not shown enough of the
 #: year to pin its geometry down, and no model is produced for it.
 MIN_FIT_SAMPLES: Final = 60
+
+#: Most intervals one source's fit will use. Two years of history is tens of
+#: thousands of hours and the geometry stops sharpening long before that,
+#: while the search cost keeps climbing -- this runs nightly on whatever
+#: hardware Home Assistant is installed on.
+MAX_FIT_INTERVALS: Final = 1600
 
 #: Headroom over the highest average ever measured, before a forecast is
 #: called impossible. Enough to cover a brighter day than the history holds.
@@ -772,6 +825,7 @@ def _score(
     capacities: Sequence[float],
     albedo: float,
     coefficient: float,
+    horizon: Horizon | None = None,
 ) -> tuple[float, float, float]:
     """Return RMSE, MAE and R² of one set of planes over some intervals."""
     if not intervals:
@@ -779,7 +833,7 @@ def _score(
     estimate = [0.0] * len(intervals)
     for (tilt, azimuth), capacity in zip(angles, capacities, strict=True):
         for index, value in enumerate(
-            _column(tilt, azimuth, intervals, albedo, coefficient)
+            _column(tilt, azimuth, intervals, albedo, coefficient, horizon)
         ):
             estimate[index] += capacity * value
     measured = [interval.sample.power for interval in intervals]
@@ -799,6 +853,7 @@ def _pooled_score(
     arrays: Sequence[Array],
     albedo: float,
     coefficient: float,
+    horizon: Horizon | None = None,
 ) -> tuple[float, float, float]:
     """Return RMSE, MAE and R² of a whole model over intervals of any source.
 
@@ -817,7 +872,7 @@ def _pooled_score(
             if array.source != source:
                 continue
             column = _column(
-                array.tilt, array.azimuth, subset, albedo, coefficient
+                array.tilt, array.azimuth, subset, albedo, coefficient, horizon
             )
             for offset, index in enumerate(indices):
                 estimate[index] += array.peak_power * column[offset]
@@ -833,11 +888,284 @@ def _pooled_score(
     )
 
 
+#: Skyline heights the search tries, in degrees of elevation. Coarse on
+#: purpose: an hourly average cannot resolve a treeline to better than this,
+#: and a finer grid only fits noise.
+HORIZON_STEPS: Final = (0.0, 2.0, 4.0, 6.0, 8.0, 11.0, 14.0, 18.0, 23.0)
+
+#: A skyline has to buy at least this much held-out R² to be believed.
+MIN_HORIZON_GAIN: Final = 0.002
+
+
+@dataclass(frozen=True, slots=True)
+class _Plan:
+    """One source's learned planes and the intervals they were learned from."""
+
+    source: str
+    angles: list[tuple[float, float]]
+    intervals: list[_Interval]
+
+
+@dataclass(frozen=True, slots=True)
+class _Shaded:
+    """One plane's irradiance, split so candidate skylines are cheap to try.
+
+    Everything that does not depend on the skyline -- sun positions, the
+    diffuse and reflected shares, the temperature derate -- is worked out once.
+    Trying a skyline then costs one multiply per sub-sample instead of a full
+    transposition, which is what makes searching twelve directions feasible.
+    """
+
+    #: Index into the flat arrays where each interval's sub-samples begin.
+    bounds: tuple[int, ...]
+    #: Direct beam, per watt-peak, before any obstruction.
+    beam: tuple[float, ...]
+    #: Diffuse and ground-reflected share, which an obstruction leaves alone.
+    rest: tuple[float, ...]
+    sector: tuple[int, ...]
+    fraction: tuple[float, ...]
+    elevation: tuple[float, ...]
+
+
+def _split(
+    tilt: float,
+    azimuth: float,
+    intervals: Sequence[_Interval],
+    albedo: float,
+    coefficient: float,
+) -> _Shaded:
+    """Precompute one candidate plane, ready for any skyline."""
+    beam: list[float] = []
+    rest: list[float] = []
+    sector: list[int] = []
+    fraction: list[float] = []
+    elevation: list[float] = []
+    bounds = [0]
+    for interval in intervals:
+        temperature = interval.sample.temperature
+        for position, sky, weight in interval.points:
+            total = plane_of_array(tilt, azimuth, position, sky, albedo=albedo)
+            direct = beam_on_plane(tilt, azimuth, position, sky)
+            # The derate is taken from the unshaded irradiance: a panel in
+            # shadow runs cooler, but by then it is barely producing anyway.
+            scale = weight * _derate(total, temperature, coefficient) / 1000.0
+            beam.append(direct * scale)
+            rest.append((total - direct) * scale)
+            index, offset = sector_weights(position.azimuth)
+            sector.append(index)
+            fraction.append(offset)
+            elevation.append(position.elevation)
+        bounds.append(len(beam))
+    return _Shaded(
+        bounds=tuple(bounds),
+        beam=tuple(beam),
+        rest=tuple(rest),
+        sector=tuple(sector),
+        fraction=tuple(fraction),
+        elevation=tuple(elevation),
+    )
+
+
+def _shaded_column(split: _Shaded, skyline: Sequence[float]) -> list[float]:
+    """Return a precomputed plane's yield under one candidate skyline."""
+    column: list[float] = []
+    for start, end in zip(split.bounds, split.bounds[1:], strict=False):
+        total = 0.0
+        for index in range(start, end):
+            lower = split.sector[index]
+            offset = split.fraction[index]
+            height = (
+                skyline[lower] * (1.0 - offset)
+                + skyline[(lower + 1) % HORIZON_SECTORS] * offset
+            )
+            clearance = (split.elevation[index] - height) / HORIZON_SOFTNESS
+            total += split.beam[index] * min(max(clearance, 0.0), 1.0)
+            total += split.rest[index]
+        column.append(total)
+    return column
+
+
+def _fit_horizon(
+    plans: Sequence[_Plan],
+    albedo: float,
+    coefficient: float,
+) -> Horizon:
+    """Work out how high the skyline stands in each compass direction.
+
+    Trees and a neighbour's gable take the first and last hour of production
+    away, and no tilt or azimuth can express that -- a fit denied a skyline
+    explains the missing evening by turning the panels east instead. Each
+    direction is searched in turn, re-solving the capacities at every trial so
+    that raising the skyline cannot be paid for by simply inflating the roof.
+
+    One skyline serves the whole site: the inverters stand under the same trees,
+    so every source votes on it, each against its own planes.
+    """
+    prepared = [
+        (
+            [
+                _split(tilt, azimuth, plan.intervals, albedo, coefficient)
+                for tilt, azimuth in plan.angles
+            ],
+            [interval.sample.power for interval in plan.intervals],
+        )
+        for plan in plans
+        if plan.angles and plan.intervals
+    ]
+    if not prepared:
+        return NO_HORIZON
+
+    def residual(skyline: Sequence[float]) -> float:
+        total = 0.0
+        for splits, target in prepared:
+            columns = [_shaded_column(split, skyline) for split in splits]
+            total += _residual(columns, nnls(columns, target), target)
+        return total
+
+    skyline = [0.0] * HORIZON_SECTORS
+    best = residual(skyline)
+    for _ in range(2):
+        improved = False
+        for index in range(HORIZON_SECTORS):
+            for height in HORIZON_STEPS:
+                if height == skyline[index]:
+                    continue
+                trial = list(skyline)
+                trial[index] = height
+                score = residual(trial)
+                if score < best * (1.0 - 1e-6):
+                    best, skyline, improved = score, trial, True
+        if not improved:
+            break
+    return Horizon(tuple(skyline))
+
+
 #: A plane has to buy at least this much held-out R² to be worth adding.
 #: Without it the search keeps splitting one roof into ever more near-vertical
 #: slivers that fit the training days a fraction better and the rest no better
 #: at all.
 MIN_HOLDOUT_GAIN: Final = 0.002
+
+
+def _thin(
+    indices: Sequence[int],
+    intervals: Sequence[_Interval],
+    limit: int = MAX_FIT_INTERVALS,
+) -> list[int]:
+    """Return at most ``limit`` intervals, spread evenly over the year.
+
+    Thinning by taking every n-th interval would be simpler and wrong: the
+    hours march in a daily cycle, so a stride can quietly line up with it and
+    hand the fit only afternoons. Sampling proportionally from every
+    month-and-hour bucket keeps the shape of the year, which is the very thing
+    the tilt is read from.
+    """
+    if len(indices) <= limit:
+        return list(indices)
+    buckets: dict[tuple[int, int], list[int]] = {}
+    for index in indices:
+        buckets.setdefault(intervals[index].group, []).append(index)
+    share = limit / len(indices)
+    kept: list[int] = []
+    for bucket in buckets.values():
+        take = max(1, round(len(bucket) * share))
+        step = len(bucket) / take
+        kept.extend(bucket[int(position * step)] for position in range(take))
+    return sorted(kept)
+
+
+def _split_days(
+    intervals: Sequence[_Interval],
+) -> tuple[set[int], set[int]]:
+    """Return the intervals to learn from, and the ones to be judged on.
+
+    Every fifth day is held out of every fit. What differs between the two
+    sets is how permissive they are.
+
+    Learning wants evidence. Selecting cloudless intervals is a workaround for
+    not knowing the sky, and when every interval carries a measured one there
+    is nothing to work around: every hour becomes usable, cloud and all. That
+    is far more evidence, and free of the quiet bias in "the brightest hours
+    available" -- in a cloudy climate those are hazy rather than clear, and a
+    fit scaled to them comes out short.
+
+    Judging wants reliability, which is not the same thing. A reanalysis grid
+    square is a poor account of the sky over one particular roof when that sky
+    is broken cloud, so scoring a model on those hours largely measures the
+    weather service. Under a clear sky the grid and the roof agree. So the
+    model is judged -- how many planes it gets, whether a skyline earns its
+    place -- only on hours whose sky is known to have been clear.
+    """
+    measured = all(interval.sample.sky is not None for interval in intervals)
+    if measured:
+        usable = set(range(len(intervals)))
+        trusted = {
+            index
+            for index, interval in enumerate(intervals)
+            if (interval.beam_fraction or 0.0) >= CLEAR_BEAM_FRACTION
+        }
+    else:
+        usable = set(select_clear_intervals(intervals))
+        trusted = usable
+
+    training = {
+        index
+        for index in usable
+        if intervals[index].sample.start.toordinal() % 5 != 0
+    }
+    judging = {
+        index
+        for index in trusted
+        if intervals[index].sample.start.toordinal() % 5 == 0
+    }
+    return training, judging
+
+
+def _add_horizon(
+    plans: Sequence[_Plan],
+    arrays: tuple[Array, ...],
+    checking: Sequence[_Interval],
+    holdout_r2: float,
+    albedo: float,
+    coefficient: float,
+) -> tuple[tuple[Array, ...], Horizon, float]:
+    """Learn what stands in front of the roof, and keep it only if it pays.
+
+    The planes settle again with the skyline in place, because the two explain
+    some of the same missing evening and have to share it out. Held-out days
+    decide: a skyline is twelve more numbers to fit, and twelve numbers can
+    always be made to flatter the days they were fitted on.
+    """
+    candidate = _fit_horizon(plans, albedo, coefficient)
+    if candidate.is_flat:
+        return arrays, NO_HORIZON, holdout_r2
+
+    shaded: list[Array] = []
+    for plan in plans:
+        target = [interval.sample.power for interval in plan.intervals]
+        settled, capacities, _ = _refine(
+            [(tilt, azimuth, 0.0) for tilt, azimuth in plan.angles],
+            plan.intervals,
+            target,
+            albedo,
+            coefficient,
+            candidate,
+        )
+        shaded.extend(
+            Array(
+                tilt=tilt, azimuth=azimuth, peak_power=capacity, source=plan.source
+            )
+            for (tilt, azimuth), capacity in zip(settled, capacities, strict=True)
+            if capacity > 0.0
+        )
+    if not shaded:
+        return arrays, NO_HORIZON, holdout_r2
+
+    improved = tuple(sorted(shaded, key=lambda array: array.peak_power, reverse=True))
+    score = _pooled_score(checking, improved, albedo, coefficient, candidate)[2]
+    if score > holdout_r2 + MIN_HORIZON_GAIN:
+        return improved, candidate, score
+    return arrays, NO_HORIZON, holdout_r2
 
 
 def fit(
@@ -886,21 +1214,22 @@ def fit(
     for index, interval in enumerate(intervals):
         by_source.setdefault(interval.sample.source, []).append(index)
 
-    # Every fifth day is kept out of every fit, and is what decides how many
-    # planes a roof gets and how good the answer is said to be.
-    clear = set(select_clear_intervals(intervals))
-    training_days = {
-        index
-        for index in clear
-        if intervals[index].sample.start.toordinal() % 5 != 0
-    }
-    held_out = clear - training_days
+    # Selecting cloudless intervals is a workaround for not knowing the sky.
+    # When every interval carries a measured one there is nothing to work
+    # around: every hour becomes usable, cloud and all, which is both far more
+    # evidence and free of the quiet bias in "the brightest hours available" --
+    # in a cloudy climate those are hazy rather than clear, and a fit scaled to
+    # them comes out short.
+    training_days, held_out = _split_days(intervals)
 
+    plans: list[_Plan] = []
     found: list[Array] = []
     for source, source_indices in by_source.items():
         training = [
             intervals[index]
-            for index in sorted(training_days.intersection(source_indices))
+            for index in _thin(
+                sorted(training_days.intersection(source_indices)), intervals
+            )
         ]
         checking = [
             intervals[index] for index in sorted(held_out.intersection(source_indices))
@@ -937,6 +1266,7 @@ def fit(
 
         if best is None:
             continue
+        plans.append(_Plan(source=source, angles=best[1], intervals=training))
         found.extend(
             Array(tilt=tilt, azimuth=azimuth, peak_power=capacity, source=source)
             for (tilt, azimuth), capacity in zip(best[1], best[2], strict=True)
@@ -946,15 +1276,24 @@ def fit(
     if not found:
         return None
 
-    arrays = tuple(sorted(found, key=lambda array: array.peak_power, reverse=True))
     fitted = sorted(training_days)
     evaluated = sorted(held_out)
-    rmse, mae, r2 = _pooled_score(
-        [intervals[index] for index in fitted], arrays, albedo, coefficient
-    )
+    training_intervals = [intervals[index] for index in fitted]
+    checking_intervals = [intervals[index] for index in evaluated]
+
+    arrays = tuple(sorted(found, key=lambda array: array.peak_power, reverse=True))
+    horizon = NO_HORIZON
     holdout_r2 = _pooled_score(
-        [intervals[index] for index in evaluated], arrays, albedo, coefficient
+        checking_intervals, arrays, albedo, coefficient, horizon
     )[2]
+
+    arrays, horizon, holdout_r2 = _add_horizon(
+        plans, arrays, checking_intervals, holdout_r2, albedo, coefficient
+    )
+
+    rmse, mae, r2 = _pooled_score(
+        training_intervals, arrays, albedo, coefficient, horizon
+    )
 
     ceiling = sum(
         max((intervals[index].sample.power for index in source_indices), default=0.0)
@@ -978,4 +1317,5 @@ def fit(
         ac_limit=ceiling * _CEILING_HEADROOM if ceiling > 0.0 else None,
         temperature_coefficient=coefficient,
         albedo=albedo,
+        horizon=horizon,
     )
