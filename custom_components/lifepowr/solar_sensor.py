@@ -189,4 +189,7 @@ class FlexioSolarModelSensor(FlexioSolarEntity, SensorEntity):
             "held_out_r2": round(model.quality.holdout_r2, 4),
             "rmse": round(model.quality.rmse, 1),
             "ac_limit": None if model.ac_limit is None else round(model.ac_limit, 1),
+            # Twelve compass sectors starting at north: how high the trees and
+            # roofs in each direction stand, in degrees of sun elevation.
+            "skyline": model.horizon.as_list(),
         }

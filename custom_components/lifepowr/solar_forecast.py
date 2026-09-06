@@ -298,16 +298,32 @@ class SolarForecastCoordinator(DataUpdateCoordinator[SolarForecast]):
         last = min(end.date(), (dt_util.utcnow() - ARCHIVE_LAG).date())
         if (last - first).days > MAX_HISTORY_DAYS:
             first = last - timedelta(days=MAX_HISTORY_DAYS)
+        sky: dict[datetime, Any] = {}
         try:
-            hours = await self.client.async_history(first, last)
+            for hour in await self.client.async_history(first, last):
+                sky[hour.start] = hour
         except OpenMeteoError as err:
             LOGGER.info(
-                "No measured irradiance available (%s); "
+                "No archived irradiance available (%s); "
                 "falling back on the cloudless-sky model",
                 err,
             )
             return {}
-        return {hour.start: hour for hour in hours}
+
+        # The archive stops a few days short of now. The forecast endpoint
+        # keeps the recent past, so it covers the seam -- without which the
+        # last days of history would arrive bare and take the whole window
+        # down to the modelled sky with them.
+        catch_up = (end.date() - last).days + 1
+        if catch_up > 0:
+            try:
+                for hour in await self.client.async_forecast(
+                    days=1, past_days=catch_up
+                ):
+                    sky.setdefault(hour.start, hour)
+            except OpenMeteoError as err:
+                LOGGER.debug("Could not close the archive gap: %s", err)
+        return sky
 
     async def _async_update_data(self) -> SolarForecast:
         """Run the coming days' sky through the learned model."""

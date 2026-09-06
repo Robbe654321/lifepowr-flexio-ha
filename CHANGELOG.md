@@ -38,6 +38,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   site's coordinates. Without it the fit falls back on its own cloudless-sky
   model, which works offline and scores measurably worse.
 
+### Fixed
+
+- A modelled sky and a measured one are never mixed in the same fit. They
+  disagree about how a cloudless sky splits into direct beam and diffuse
+  glow, and a fit shown both reads that disagreement as geometry: on a
+  synthetic roof of one south-facing plane, five percent of mismatched hours
+  were enough to return a north-facing plane and a vertical one, and 43% too
+  much capacity. The window now uses one kind of sky throughout.
+- A few hours without measured irradiance no longer discard the rest. The
+  reanalysis archive trails real time by several days, so the most recent
+  hours routinely arrive bare, and an all-or-nothing test would have dropped a
+  whole year of measured irradiance because the last two days of it were not
+  published yet. The gap is now filled from the forecast endpoint's record of
+  the recent past, and any remainder is simply left out.
+
 ## [0.2.1] — 2026-09-06
 
 ### Fixed

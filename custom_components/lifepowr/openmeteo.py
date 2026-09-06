@@ -80,11 +80,23 @@ class OpenMeteoClient:
         self._latitude = latitude
         self._longitude = longitude
 
-    async def async_forecast(self, days: int = 3) -> list[SkyHour]:
-        """Return the coming days' sky, hour by hour."""
+    #: Most days of the recent past the forecast endpoint will serve.
+    MAX_PAST_DAYS: Final = 92
+
+    async def async_forecast(
+        self, days: int = 3, past_days: int = 1
+    ) -> list[SkyHour]:
+        """Return the sky around now, hour by hour.
+
+        ``past_days`` reaches back into the recent past that the reanalysis
+        archive has not caught up with yet.
+        """
         return await self._async_read(
             FORECAST_URL,
-            {"forecast_days": days, "past_days": 1},
+            {
+                "forecast_days": days,
+                "past_days": min(past_days, self.MAX_PAST_DAYS),
+            },
         )
 
     async def async_history(self, start: date, end: date) -> list[SkyHour]:

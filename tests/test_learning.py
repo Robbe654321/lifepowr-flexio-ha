@@ -257,3 +257,53 @@ def test_a_skyline_survives_storage() -> None:
     assert restored.horizon.elevations == pytest.approx(
         model.horizon.elevations, abs=0.05
     )
+
+
+def test_a_few_missing_skies_do_not_lose_the_measured_ones() -> None:
+    """The reanalysis trails real time, so recent hours arrive bare.
+
+    An all-or-nothing test would drop a whole year of measured irradiance
+    because the last two days of it were not published yet. To show which path
+    was taken, the measured skies here are deliberately twice the truth: a fit
+    that used them must come back with half the capacity, and one that quietly
+    fell back on its own cloudless-sky model would not.
+    """
+    samples = synthesise([(30.0, 180.0, 6000.0)], cloudiness=0.9)
+    doubled = [
+        PowerSample(
+            start=sample.start,
+            end=sample.end,
+            power=sample.power,
+            # Every twentieth hour has no sky, as if the archive stopped short.
+            sky=(
+                None
+                if index % 20 == 0
+                else _mean_clear_sky(sample.start, sample.end).scaled(2.0)
+            ),
+        )
+        for index, sample in enumerate(samples)
+    ]
+    model = fit(doubled, LAT, LON, ALT)
+    assert model is not None
+    assert model.peak_power == pytest.approx(3000.0, rel=0.2)
+
+
+def test_mostly_missing_skies_fall_back_to_the_modelled_one() -> None:
+    """Below the threshold the measured handful is not worth the mixing."""
+    samples = synthesise([(30.0, 180.0, 6000.0)], cloudiness=0.9)
+    sparse = [
+        PowerSample(
+            start=sample.start,
+            end=sample.end,
+            power=sample.power,
+            sky=(
+                _mean_clear_sky(sample.start, sample.end).scaled(2.0)
+                if index % 20 == 0
+                else None
+            ),
+        )
+        for index, sample in enumerate(samples)
+    ]
+    model = fit(sparse, LAT, LON, ALT)
+    assert model is not None
+    assert model.peak_power == pytest.approx(6000.0, rel=0.2)

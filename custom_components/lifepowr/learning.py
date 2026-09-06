@@ -515,8 +515,14 @@ def _prepare(
     longitude: float,
     altitude: float,
     linke: float | None,
+    use_measured: bool = True,
 ) -> list[_Interval]:
-    """Precompute sun positions and skies for every usable interval."""
+    """Precompute sun positions and skies for every usable interval.
+
+    With ``use_measured`` false the skies carried by the samples are ignored
+    and every interval gets a modelled one, so the whole fit sees one kind of
+    sky rather than two.
+    """
     prepared: list[_Interval] = []
     for sample in samples:
         span = sample.span
@@ -535,11 +541,17 @@ def _prepare(
             )
             modelled = clear_sky(position, altitude, turbidity)
             clear_ghi += weight * modelled.ghi
-            points.append((position, sample.sky or modelled, weight))
+            points.append(
+                (
+                    position,
+                    sample.sky if use_measured and sample.sky else modelled,
+                    weight,
+                )
+            )
         if not points or clear_ghi <= 1.0:
             continue
         middle = sample.start + span / 2
-        measured = sample.sky
+        measured = sample.sky if use_measured else None
         prepared.append(
             _Interval(
                 sample=sample,
@@ -774,6 +786,13 @@ def _refine(
 #: Below this many cloudless intervals a source has not shown enough of the
 #: year to pin its geometry down, and no model is produced for it.
 MIN_FIT_SAMPLES: Final = 60
+
+#: Share of intervals that must carry a measured sky before the fit works in
+#: measured mode at all. A reanalysis trails real time by a few days, so the
+#: most recent hours routinely arrive bare; without this an all-or-nothing
+#: test would drop a whole year of measured irradiance over the last two days
+#: of it, and quietly fall back on the weaker modelled sky.
+MEASURED_SHARE: Final = 0.8
 
 #: Most intervals one source's fit will use. Two years of history is tens of
 #: thousands of hours and the geometry stops sharpening long before that,
@@ -1047,6 +1066,43 @@ def _fit_horizon(
 MIN_HOLDOUT_GAIN: Final = 0.002
 
 
+def _gather(
+    samples: Sequence[PowerSample],
+    latitude: float,
+    longitude: float,
+    altitude: float,
+    linke: float | None,
+) -> list[_Interval]:
+    """Prepare the usable intervals, all under one kind of sky.
+
+    Either every interval carries a measured sky or none of them does. The two
+    kinds are not comparable -- a modelled sky and a measured one disagree
+    about how a cloudless sky splits into hard beam and soft glow -- and a fit
+    shown both reads that disagreement as geometry, answering with a
+    north-facing plane and a vertical one. So when most skies were measured
+    the bare handful is dropped, and when only a handful were, they are set
+    aside and the whole window is modelled instead.
+    """
+
+    def prepared(use_measured: bool) -> list[_Interval]:
+        intervals = _prepare(
+            samples, latitude, longitude, altitude, linke, use_measured
+        )
+        return [intervals[index] for index in _drop_clipped(intervals)]
+
+    intervals = prepared(use_measured=True)
+    measured = [
+        index
+        for index, interval in enumerate(intervals)
+        if interval.sample.sky is not None
+    ]
+    if not measured:
+        return intervals
+    if len(measured) >= MEASURED_SHARE * len(intervals):
+        return [intervals[index] for index in measured]
+    return prepared(use_measured=False)
+
+
 def _thin(
     indices: Sequence[int],
     intervals: Sequence[_Interval],
@@ -1195,10 +1251,9 @@ def fit(
     the model still answers for the site as a whole, which is what a forecast
     and a single combined meter both need.
     """
-    intervals = _prepare(samples, latitude, longitude, altitude, linke)
+    intervals = _gather(list(samples), latitude, longitude, altitude, linke)
     if len(intervals) < MIN_FIT_SAMPLES:
         return None
-    intervals = [intervals[index] for index in _drop_clipped(intervals)]
     orientations = _orientations(tilts, azimuths)
 
     # The temperature correction is only applied when every interval knows its
