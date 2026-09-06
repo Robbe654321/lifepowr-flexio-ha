@@ -30,7 +30,7 @@ they stand against this repository:
 | One integration under `custom_components/` | ✅ `custom_components/lifepowr/` |
 | `hacs.json` present | ✅ |
 | `manifest.json` with `domain`, `name`, `documentation`, `issue_tracker`, `codeowners`, `version` | ✅ |
-| `brand/icon.png` present | ✅ 256×256, with `icon@2x.png` at 512×512 |
+| `custom_components/lifepowr/brand/icon.png` present | ✅ 256×256, with `icon@2x.png` at 512×512 |
 | **HACS Action** passing | ✅ in `.github/workflows/validate.yml` |
 | **Hassfest** passing | ✅ same workflow |
 | A published GitHub **release** | ⬜ **the one thing still to do** |
@@ -68,9 +68,12 @@ scheduled HACS scan.
 
 Home Assistant loads integration icons from
 [brands.home-assistant.io](https://brands.home-assistant.io), not from this
-repository, so until the icons in `brand/` are merged into
+repository, so until the icons in `custom_components/lifepowr/brand/` are
+merged into
 [home-assistant/brands](https://github.com/home-assistant/brands) the
 integrations list shows a placeholder. HACS accepts the repository either way —
-`brand/icon.png` here is what satisfies its own requirement.
+`custom_components/lifepowr/brand/icon.png` here is what satisfies its own
+requirement.
 
-[`brand/README.md`](../brand/README.md) covers that submission.
+[`custom_components/lifepowr/brand/README.md`](../custom_components/lifepowr/brand/README.md)
+covers that submission.

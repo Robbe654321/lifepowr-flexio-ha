@@ -6,6 +6,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.1] — 2026-09-06
+
+### Fixed
+
+- The brand icons moved from `brand/` in the repository root to
+  `custom_components/lifepowr/brand/`, which is where the HACS action looks
+  for them. Found there, its brands check passes without waiting for the
+  separate pull request against `home-assistant/brands`; the validation
+  workflow no longer has to ignore that check. The icons now ship with the
+  integration, so Home Assistant has them locally.
+
 ## [0.2.0] — 2026-09-06
 
 ### Fixed
@@ -90,6 +101,7 @@ The API also signs consumption negative. Grid power and household consumption
 are negated so they read positively in Home Assistant; battery flow keeps its
 raw sign, where positive already means discharging.
 
-[Unreleased]: https://github.com/Robbe654321/lifepowr-flexio-ha/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/Robbe654321/lifepowr-flexio-ha/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/Robbe654321/lifepowr-flexio-ha/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/Robbe654321/lifepowr-flexio-ha/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Robbe654321/lifepowr-flexio-ha/releases/tag/v0.1.0

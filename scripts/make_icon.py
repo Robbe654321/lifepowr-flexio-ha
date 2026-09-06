@@ -6,7 +6,8 @@ it, drawn so it survives the 24 px at which Home Assistant renders it in the
 integrations list — an outlined battery with a bolt inside turns to mush at
 that size, a filled one does not.
 
-See brand/README.md for how these reach Home Assistant.
+See custom_components/lifepowr/brand/README.md for how these reach
+Home Assistant.
 """
 
 from __future__ import annotations
@@ -74,8 +75,10 @@ def icon(size: int) -> Image.Image:
 
 
 def main() -> None:
-    """Write both icon sizes into brand/."""
-    out = Path(__file__).resolve().parent.parent / "brand"
+    """Write both icon sizes into the integration's brand directory."""
+    # The HACS action looks for these at custom_components/<domain>/brand/,
+    # not at the repository root.
+    out = Path(__file__).resolve().parent.parent / "custom_components/lifepowr/brand"
     out.mkdir(exist_ok=True)
     for size, name in ((256, "icon.png"), (512, "icon@2x.png")):
         image = icon(size)

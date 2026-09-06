@@ -1,8 +1,11 @@
 # Brand assets
 
-These are the icons Home Assistant shows for this integration. They live here
-so they are versioned with the code, but Home Assistant does **not** read them
-from this repository — it loads them from
+These are the icons Home Assistant shows for this integration. They live inside
+the integration directory because that is where the HACS action looks for them
+(`custom_components/<domain>/brand/icon.png`); found there, it stops asking
+whether the domain is in the brands repository yet.
+
+Home Assistant itself does **not** read them from this repository — it loads them from
 [brands.home-assistant.io](https://brands.home-assistant.io), which is fed by
 the [home-assistant/brands](https://github.com/home-assistant/brands) repo.
 
