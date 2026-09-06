@@ -67,6 +67,8 @@ COLUMNS = [
             ("gap", ""),
             ("accent", "Reports watts, not kW"),
             ("accent", "Flips grid + load sign"),
+            # A real minus sign, not a hyphen: this is rendered typography.
+            ("accent", "Derives battery = inv − PV"),  # noqa: RUF001
             ("gap", ""),
             ("muted", "polls every 10 s, tunable"),
         ],
@@ -77,9 +79,10 @@ COLUMNS = [
         "title": "Home Assistant",
         "subtitle": "one device, real entities",
         "rows": [
-            ("text", "12 sensors"),
+            ("text", "13 sensors"),
             ("muted", "solar · load · grid · battery"),
-            ("muted", "price · SoC · SoH · V · A"),
+            ("muted", "inverter · price · SoC · SoH"),
+            ("muted", "battery V · A"),
             ("gap", ""),
             ("text", "6 kWh totals"),
             ("muted", "integrated from the watts"),

@@ -17,6 +17,7 @@ from .parsing import (  # noqa: F401  (re-exported for entity platforms)
     FIELD_ALIASES,
     FIELD_NEW_MAX_PRICE,
     KEY_BATTERY_CURRENT,
+    KEY_BATTERY_POWER,
     KEY_BATTERY_SOC,
     KEY_BATTERY_SOH,
     KEY_BATTERY_VOLTAGE,
@@ -35,6 +36,7 @@ from .parsing import (  # noqa: F401  (re-exported for entity platforms)
     PATH_LEGACY_LOAD_CONTROL,
     PATH_MEASUREMENTS,
     PATH_VERSION,
+    apply_derived,
     coerce_value,
     normalise_name,
     normalise_timestamp,
@@ -214,7 +216,7 @@ class FlexioClient:
 
         if not data:
             raise FlexioResponseError("Box returned no known measurements")
-        return data
+        return apply_derived(data)
 
     async def _async_get_data_per_field(self) -> dict[str, float]:
         """Fetch every measurement from its own endpoint."""
@@ -232,7 +234,7 @@ class FlexioClient:
                 data[key] = value
         if not data:
             raise FlexioResponseError("Box returned no known measurements")
-        return data
+        return apply_derived(data)
 
     async def async_set_generic_load_max_price(self, price: float) -> float | None:
         """Set the generic load's maximum electricity price.

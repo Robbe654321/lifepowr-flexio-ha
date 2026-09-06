@@ -7,10 +7,10 @@ bidirectional grid and battery flows are split into two positive-only sensors
 so importing and exporting never cancel out.
 
 Totals are restored across restarts, so history survives an upgrade or a
-reboot. The measurements are filtered and 15 seconds apart, so the trapezoidal
-rule tracks them closely; a gap longer than :data:`MAX_SAMPLE_GAP` (the box
-unreachable, Home Assistant stopped) is not integrated, because nothing is
-known about what the power did in between.
+reboot. The measurements are filtered and a few seconds apart, so the
+trapezoidal rule tracks them closely; a gap longer than
+:data:`MAX_SAMPLE_GAP` (the box unreachable, Home Assistant stopped) is not
+integrated, because nothing is known about what the power did in between.
 """
 
 from __future__ import annotations
@@ -34,8 +34,9 @@ from .coordinator import FlexioCoordinator
 from .entity import FlexioEntity
 
 #: Longer gaps between two samples are treated as missing data rather than
-#: integrated. Twenty times the 15 second poll interval, so a slow box or a
-#: brief network outage still counts, while a restart does not invent energy.
+#: integrated. Comfortably above any configurable poll interval, so a slow box
+#: or a brief network outage still counts, while a restart does not invent
+#: energy.
 MAX_SAMPLE_GAP = timedelta(minutes=5)
 
 #: Watt-seconds per kilowatt-hour.
@@ -64,8 +65,15 @@ class FlexioEnergySensorEntityDescription(SensorEntityDescription):
 
 #: The API's load convention signs consumption negative, so importing from the
 #: grid and consuming in the house are the falling side of their measurement,
-#: while solar production is already positive. Inverter power is the one
+#: while solar production is already positive. Battery power is the one
 #: measurement whose raw sign matches Home Assistant: positive is discharging.
+#:
+#: That battery figure is derived, not reported. ``TotalInvPowerFiltered`` is
+#: the inverter's *total* AC power with solar already in it, so integrating it
+#: books every sunny hour as a battery discharge -- on a real installation,
+#: 77 kWh discharged against 10 kWh charged on a battery of roughly 34 kWh
+#: usable. :func:`~.parsing.apply_derived` subtracts PV to get the battery's
+#: own flow, and that is what is integrated here.
 ENERGY_SENSORS: tuple[FlexioEnergySensorEntityDescription, ...] = (
     FlexioEnergySensorEntityDescription(
         key="pv_energy",
@@ -94,13 +102,13 @@ ENERGY_SENSORS: tuple[FlexioEnergySensorEntityDescription, ...] = (
     FlexioEnergySensorEntityDescription(
         key="battery_charge_energy",
         translation_key="battery_charge_energy",
-        source_key=api.KEY_INVERTER_POWER,
+        source_key=api.KEY_BATTERY_POWER,
         power_fn=_falling,
     ),
     FlexioEnergySensorEntityDescription(
         key="battery_discharge_energy",
         translation_key="battery_discharge_energy",
-        source_key=api.KEY_INVERTER_POWER,
+        source_key=api.KEY_BATTERY_POWER,
         power_fn=_rising,
     ),
 )

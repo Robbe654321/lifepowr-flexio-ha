@@ -17,7 +17,7 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/architecture-dark.svg">
-    <img alt="The FlexiObox serves a local API; the integration polls it every 10 seconds, normalises units and signs, and exposes 12 sensors, six kWh energy totals and one number in Home Assistant." src="docs/architecture-light.svg" width="100%">
+    <img alt="The FlexiObox serves a local API; the integration polls it every 10 seconds, normalises units and signs, and exposes 13 sensors, six kWh energy totals and one number in Home Assistant." src="docs/architecture-light.svg" width="100%">
   </picture>
 </p>
 
@@ -93,7 +93,8 @@ reports — nothing shows up permanently unknown.
 | Solar production | W | Total PV production |
 | Household consumption | W | Positive while consuming |
 | Grid power | W | Positive importing, negative exporting |
-| Inverter power | W | Positive discharging, negative charging |
+| Battery power | W | Positive discharging, negative charging |
+| Inverter power (total AC) | W | Solar **and** battery together — see below |
 | Battery state of charge | % | |
 | Battery state of health | % | |
 | Battery voltage | V | |
@@ -114,8 +115,8 @@ integrated from those power readings:
 | Household consumption energy | kWh | Household consumption |
 | Grid import energy | kWh | Grid power, while positive |
 | Grid export energy | kWh | Grid power, while negative |
-| Battery charge energy | kWh | Inverter power, while negative |
-| Battery discharge energy | kWh | Inverter power, while positive |
+| Battery charge energy | kWh | Battery power, while negative |
+| Battery discharge energy | kWh | Battery power, while positive |
 
 ## Units and sign convention
 
@@ -125,6 +126,12 @@ hardware. If you only read one section, read this one.
 **The API reports watts, not kilowatts.** The website's table says kW for every
 power field. A box reporting `-5341.34` for grid power is drawing 5.3 kW — as
 kilowatts that would be 5.3 megawatts.
+
+**`TotalInvPowerFiltered` is not the battery.** It is the inverter's total AC
+power, solar included. The battery's own flow is `inverter − PV`, which the
+integration derives and exposes as **Battery power**. Use that one for energy
+accounting; treating the inverter reading as the battery turns every sunny hour
+into a phantom discharge.
 
 **Consumption is negative.** The API uses a load convention: importing from the
 grid, consuming in the house and charging the battery are all negative. Solar
@@ -147,6 +154,8 @@ Two independent identities, both closing within 3%:
 | --- | --- | --- | --- |
 | `grid ≈ load + inverter` | −5458 W | −5341 W | 2.2% — filter lag |
 | `battery DC ≈ inverter − PV` | −3617 W | −3500 W | 3.3% — conversion loss |
+
+That second identity is also the definition of the battery power sensor.
 
 421.4 V × −8.31 A is 3.5 kW going into the battery, while the inverter pulls
 2456 W from the grid plus 1161 W of solar. The 117 W difference is the

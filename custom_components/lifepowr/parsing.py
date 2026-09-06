@@ -29,6 +29,12 @@ KEY_GENERIC_LOAD_POWER: Final = "generic_load_power"
 KEY_GENERIC_LOAD_MAX_PRICE: Final = "generic_load_max_price"
 KEY_TIMESTAMP: Final = "timestamp"
 
+#: Derived, not reported by the box. ``TotalInvPowerFiltered`` is the inverter's
+#: total AC power, which already contains the solar production; the battery's
+#: own flow is what remains after subtracting PV. Confirmed against the vendor
+#: app, which shows exactly this as "Batterij".
+KEY_BATTERY_POWER: Final = "battery_power"
+
 #: Raw field names per internal key. Matching is done on a normalised
 #: (lowercase, alphanumeric-only) form, so casing and separators do not matter
 #: and only genuinely different spellings need to be listed.
@@ -112,6 +118,23 @@ def normalise_timestamp(raw: float) -> float | None:
     if raw <= 0:
         return None
     return raw / 1000 if raw > _MS_THRESHOLD else raw
+
+
+def apply_derived(data: dict[str, float]) -> dict[str, float]:
+    """Add values the box does not report but that follow from the ones it does.
+
+    ``TotalInvPowerFiltered`` is the whole inverter, solar included. Treating it
+    as the battery makes every sunny hour look like a discharge, so the battery
+    flow is derived here instead:
+
+        battery = inverter - PV
+
+    Same sign convention as the inverter: positive discharging, negative
+    charging. Skipped when either input is missing.
+    """
+    if KEY_INVERTER_POWER in data and KEY_PV_POWER in data:
+        data[KEY_BATTERY_POWER] = data[KEY_INVERTER_POWER] - data[KEY_PV_POWER]
+    return data
 
 
 def parse_payload(payload: Any) -> dict[str, float]:

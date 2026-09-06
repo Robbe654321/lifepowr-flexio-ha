@@ -6,8 +6,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Battery energy was wildly overstated.** `TotalInvPowerFiltered` is the
+  inverter's total AC power with solar included, not the battery's own flow, so
+  every sunny hour was recorded as a battery discharge. One real installation
+  showed 77 kWh discharged against 10 kWh charged on a battery of roughly
+  34 kWh usable. The integration now derives `battery_power` as
+  `inverter − PV` and exposes it as its own sensor; the battery charge and
+  discharge totals are integrated from it instead of the inverter reading.
+
+  Existing installations must delete the statistics of their battery charge and
+  discharge sensors, which hold the bad history.
+
 ### Added
 
+- **Battery power** sensor, derived rather than reported.
 - Six cumulative kWh sensors, so the Energy dashboard can be configured
   straight from the integration: solar production, household consumption, grid
   import, grid export, battery charge and battery discharge energy. Each is a
@@ -22,6 +36,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 
 - Default poll interval lowered from 15 to 10 seconds.
+- Inverter power is now named "Inverter power (total AC)", to make clear it is
+  not the battery.
 
 ### Removed
 

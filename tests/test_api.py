@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import re
 
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 import pytest
 
 from custom_components.lifepowr import api
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 #: The exact example document from the on-device OpenAPI spec.
 OPENAPI_MEASUREMENTS = {
@@ -44,6 +44,34 @@ def test_parse_openapi_measurements() -> None:
         "electricity_price": 0.1234,
         "timestamp": 1757000000.0,
     }
+
+
+def test_battery_power_is_inverter_minus_pv() -> None:
+    """The inverter reading includes solar; the battery is what remains.
+
+    Regression test for counting sunny hours as battery discharge. The vendor
+    app showed 132 W solar and 11592 W battery at the same moment the inverter
+    total was 11724 W.
+    """
+    data = api.apply_derived({"inverter_power": 11724.0, "pv_power": 132.0})
+    assert data["battery_power"] == pytest.approx(11592.0)
+
+    # Charging: the 4 September sample, cross-checked against 421.4 V x -8.31 A.
+    data = api.apply_derived({"inverter_power": -2456.2, "pv_power": 1160.6})
+    assert data["battery_power"] == pytest.approx(-3616.8)
+    assert data["battery_power"] == pytest.approx(421.4 * -8.31, rel=0.05)
+
+
+def test_battery_power_needs_both_inputs() -> None:
+    """Without solar there is nothing to subtract, so nothing is derived."""
+    assert "battery_power" not in api.apply_derived({"inverter_power": 100.0})
+    assert "battery_power" not in api.apply_derived({"pv_power": 100.0})
+
+
+def test_sunny_idle_battery_reads_zero() -> None:
+    """Solar flowing straight through must not look like a discharge."""
+    data = api.apply_derived({"inverter_power": 4000.0, "pv_power": 4000.0})
+    assert data["battery_power"] == 0
 
 
 def test_parse_openapi_generic_load() -> None:
