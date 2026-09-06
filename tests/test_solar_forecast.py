@@ -22,6 +22,7 @@ from custom_components.lifepowr.const import (
 from custom_components.lifepowr.diagnostics import (
     async_get_config_entry_diagnostics,
 )
+from custom_components.lifepowr.energy import async_get_solar_forecast
 from custom_components.lifepowr.openmeteo import ARCHIVE_URL, FORECAST_URL
 from custom_components.lifepowr.solar import Irradiance
 from custom_components.lifepowr.solar_forecast import SolarForecast
@@ -376,3 +377,22 @@ async def test_diagnostics_without_a_forecast(hass, init_integration) -> None:
     """The key is present and empty rather than missing."""
     report = await async_get_config_entry_diagnostics(hass, init_integration)
     assert report["solar_model"] is None
+
+
+async def test_the_energy_dashboard_gets_the_forecast(hass, init_solar) -> None:
+    """Drawn behind the solar bars, so it is checked against reality daily."""
+    result = await async_get_solar_forecast(hass, init_solar.entry_id)
+    assert result is not None
+    hours = result["wh_hours"]
+    assert hours
+    # Keys parse back as aware timestamps, values are watt-hours for that hour.
+    for stamp, watt_hours in hours.items():
+        assert datetime.fromisoformat(stamp).tzinfo is not None
+        assert watt_hours >= 0.0
+    assert max(hours.values()) > 0.0
+
+
+async def test_no_energy_forecast_without_a_roof(hass, init_integration) -> None:
+    """The dashboard is told there is none, rather than shown an empty line."""
+    assert await async_get_solar_forecast(hass, init_integration.entry_id) is None
+    assert await async_get_solar_forecast(hass, "does-not-exist") is None

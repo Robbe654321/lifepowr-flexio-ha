@@ -19,19 +19,48 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
+from homeassistant.components.energy.types import SolarForecastType
 from homeassistant.components.sensor import (
     RestoreSensor,
     SensorDeviceClass,
     SensorEntityDescription,
     SensorStateClass,
 )
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import UnitOfEnergy
-from homeassistant.core import callback
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.util import dt as dt_util
 
 from . import api
 from .coordinator import FlexioCoordinator
 from .entity import FlexioEntity
+
+
+async def async_get_solar_forecast(
+    hass: HomeAssistant, config_entry_id: str
+) -> SolarForecastType | None:
+    """Return the learned solar forecast for the Energy dashboard.
+
+    Home Assistant draws this as the expected-production line behind the solar
+    bars, so the forecast is checked against reality every day without anyone
+    having to build a chart for it.
+
+    The forecast holds the average power over each hour, in watts, and the
+    average watts over one hour is exactly that many watt-hours -- which is
+    what the dashboard asks for.
+    """
+    entry = hass.config_entries.async_get_entry(config_entry_id)
+    if entry is None or entry.state is not ConfigEntryState.LOADED:
+        return None
+    solar = getattr(entry.runtime_data, "solar", None)
+    if solar is None or solar.data is None or not solar.data.available:
+        return None
+    return {
+        "wh_hours": {
+            start.isoformat(): round(watts, 1) for start, watts in solar.data.hours
+        }
+    }
+
 
 #: Longer gaps between two samples are treated as missing data rather than
 #: integrated. Comfortably above any configurable poll interval, so a slow box

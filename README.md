@@ -370,6 +370,14 @@ what tilt is read from.
   place. Two orientations less than about 60° apart usually cannot be told
   apart from a single meter, and are reported as the one plane that fits.
 
+### On the Energy dashboard
+
+Once a roof has been learned, Home Assistant will draw the forecast as the
+expected-production line behind your solar bars. Under **Settings → Dashboards
+→ Energy**, edit your solar production source and pick **LIFEPOWR FlexiO** as
+the forecast. The forecast is then checked against reality every day, on the
+same chart, without anyone having to build one.
+
 ### Re-learning
 
 The fit runs nightly by itself. After adding panels, call

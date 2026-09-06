@@ -30,6 +30,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Six sensors: expected production now, today, the rest of today, tomorrow,
   when today should peak, and a diagnostic that shows the learned roof with
   the quality of the fit.
+- The forecast can be picked as the solar forecast source on the Energy
+  dashboard, where Home Assistant draws it behind the production bars — so it
+  is checked against reality every day on the same chart.
 - `lifepowr.learn_solar_model`, to redo the fit immediately after adding
   panels rather than waiting for the nightly run.
 - Irradiance from [Open-Meteo](https://open-meteo.com/), free and without an
