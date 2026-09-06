@@ -10,8 +10,10 @@
 # Needs Home Assistant 2025.10 or newer for the sparklines inside the tiles.
 # On anything older those tiles show an unknown-feature error and the rest of
 # the dashboard still works; delete the two "features" lines to silence them.
-# Entity IDs are the ones a fresh install creates. If yours differ -- a second
-# FlexiObox, or an install predating the inverter rename -- adjust them here.
+# Entity IDs are the ones a fresh install creates. Both spellings of the
+# inverter sensor are handled, so an install predating the 0.2.0 rename works
+# too. If yours differ for another reason -- a second FlexiObox, say -- adjust
+# them here.
 
 views:
   - type: sections
@@ -391,6 +393,27 @@ views:
             features_position: bottom
             grid_options:
               columns: 12
+            visibility:
+              - condition: state
+                entity: sensor.flexio_inverter_power_total_ac
+                state_not:
+                  - unavailable
+                  - unknown
+          - type: tile
+            entity: sensor.flexio_inverter_power
+            name: Inverter, total AC
+            color: deep-orange
+            features:
+              - type: trend-graph
+            features_position: bottom
+            grid_options:
+              columns: 12
+            visibility:
+              - condition: state
+                entity: sensor.flexio_inverter_power
+                state_not:
+                  - unavailable
+                  - unknown
           - type: tile
             entity: sensor.flexio_battery_power
             name: Battery
@@ -432,6 +455,27 @@ views:
             title: Power
             grid_options:
               columns: full
+            visibility:
+              - condition: state
+                entity: sensor.flexio_inverter_power_total_ac
+                state_not:
+                  - unavailable
+                  - unknown
+          - type: history-graph
+            entities:
+              - sensor.flexio_inverter_power
+              - sensor.flexio_solar_production
+              - sensor.flexio_battery_power
+            hours_to_show: 6
+            title: Power
+            grid_options:
+              columns: full
+            visibility:
+              - condition: state
+                entity: sensor.flexio_inverter_power
+                state_not:
+                  - unavailable
+                  - unknown
           - type: markdown
             content: |-
               ### Why there are two of these

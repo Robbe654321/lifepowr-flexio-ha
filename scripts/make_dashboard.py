@@ -28,6 +28,11 @@ LOAD = "sensor.flexio_household_consumption"
 GRID = "sensor.flexio_grid_power"
 BATTERY = "sensor.flexio_battery_power"
 INVERTER = "sensor.flexio_inverter_power_total_ac"
+#: What the inverter sensor is called on an installation that predates the
+#: rename in 0.2.0. Home Assistant's registry keeps an entity's id once it has
+#: been created, so upgrading does not move it. Both are offered, each hidden
+#: unless it exists, so the dashboard fits either install.
+INVERTER_LEGACY = "sensor.flexio_inverter_power"
 SETPOINT = "sensor.flexio_inverter_setpoint"
 GENERIC_LOAD = "sensor.flexio_generic_load_available_power"
 SOC = "sensor.flexio_battery_state_of_charge"
@@ -492,11 +497,29 @@ def _view_system(t: dict[str, str]) -> dict[str, Any]:
             section(
                 [
                     heading(t["h_inverter"], "mdi:solar-power-variant"),
-                    tile(INVERTER, t["inverter"], "deep-orange", trend=True),
+                    only_if_present(
+                        tile(INVERTER, t["inverter"], "deep-orange", trend=True),
+                        INVERTER,
+                    ),
+                    only_if_present(
+                        tile(INVERTER_LEGACY, t["inverter"], "deep-orange", trend=True),
+                        INVERTER_LEGACY,
+                    ),
                     tile(BATTERY, t["battery"], "purple", trend=True),
                     tile(GRID, t["grid"], "red", trend=True),
                     only_if_present(tile(SETPOINT, t["setpoint"], "grey"), SETPOINT),
-                    history([INVERTER, PV, BATTERY], 6, t["power_flow"]),
+                    # One graph per spelling of the inverter sensor, each
+                    # shown only if that entity exists. Listing both in one
+                    # graph works, but the frontend puts the missing one in
+                    # the legend as a raw entity id.
+                    only_if_present(
+                        history([INVERTER, PV, BATTERY], 6, t["power_flow"]),
+                        INVERTER,
+                    ),
+                    only_if_present(
+                        history([INVERTER_LEGACY, PV, BATTERY], 6, t["power_flow"]),
+                        INVERTER_LEGACY,
+                    ),
                     markdown(t["note_inverter"]),
                 ]
             ),
@@ -610,8 +633,10 @@ HEADER = """# {title}
 # Needs Home Assistant 2025.10 or newer for the sparklines inside the tiles.
 # On anything older those tiles show an unknown-feature error and the rest of
 # the dashboard still works; delete the two "features" lines to silence them.
-# Entity IDs are the ones a fresh install creates. If yours differ -- a second
-# FlexiObox, or an install predating the inverter rename -- adjust them here.
+# Entity IDs are the ones a fresh install creates. Both spellings of the
+# inverter sensor are handled, so an install predating the 0.2.0 rename works
+# too. If yours differ for another reason -- a second FlexiObox, say -- adjust
+# them here.
 """
 
 
