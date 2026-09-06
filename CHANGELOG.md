@@ -21,7 +21,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
   Shading is learned alongside the panels: one skyline height per compass
   direction, because a fit denied a skyline explains a missing evening by
-  turning the panels east instead.
+  turning the panels east instead. The skyline is held continuous, since a
+  plane's capacity and the trees in front of it are partly interchangeable
+  and an unconstrained search cuts a notch exactly where an array faces.
 
   How many planes a roof gets, and whether a skyline earns its place, are
   decided on days held out of the fit rather than on how well they flatter the

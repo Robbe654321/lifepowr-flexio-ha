@@ -915,6 +915,14 @@ HORIZON_STEPS: Final = (0.0, 2.0, 4.0, 6.0, 8.0, 11.0, 14.0, 18.0, 23.0)
 #: A skyline has to buy at least this much held-out R² to be believed.
 MIN_HORIZON_GAIN: Final = 0.002
 
+#: How strongly neighbouring sectors are pulled towards each other, as a share
+#: of the unobstructed residual per squared degree of disagreement. Skylines
+#: are continuous -- a treeline does not stop dead and resume 30 degrees
+#: later -- while a plane's capacity and the skyline in front of it are partly
+#: interchangeable, so without this the search will happily cut a notch in the
+#: skyline exactly where an array faces and pay for it with capacity.
+HORIZON_SMOOTHNESS: Final = 2e-5
+
 
 @dataclass(frozen=True, slots=True)
 class _Plan:
@@ -1008,6 +1016,7 @@ def _fit_horizon(
     plans: Sequence[_Plan],
     albedo: float,
     coefficient: float,
+    smoothness: float = HORIZON_SMOOTHNESS,
 ) -> Horizon:
     """Work out how high the skyline stands in each compass direction.
 
@@ -1034,14 +1043,24 @@ def _fit_horizon(
     if not prepared:
         return NO_HORIZON
 
-    def residual(skyline: Sequence[float]) -> float:
+    def fit_residual(skyline: Sequence[float]) -> float:
         total = 0.0
         for splits, target in prepared:
             columns = [_shaded_column(split, skyline) for split in splits]
             total += _residual(columns, nnls(columns, target), target)
         return total
 
-    skyline = [0.0] * HORIZON_SECTORS
+    open_sky = [0.0] * HORIZON_SECTORS
+    scale = fit_residual(open_sky) * smoothness
+
+    def residual(skyline: Sequence[float]) -> float:
+        roughness = sum(
+            (skyline[index] - skyline[(index + 1) % HORIZON_SECTORS]) ** 2
+            for index in range(HORIZON_SECTORS)
+        )
+        return fit_residual(skyline) + scale * roughness
+
+    skyline = open_sky
     best = residual(skyline)
     for _ in range(2):
         improved = False
