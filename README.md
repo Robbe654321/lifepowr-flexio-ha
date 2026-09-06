@@ -237,6 +237,13 @@ and the battery.
 [`dashboards/energy.yaml`](dashboards/energy.yaml) is a complete four-view
 dashboard that does. Dutch: [`dashboards/energy-nl.yaml`](dashboards/energy-nl.yaml).
 
+<p align="center">
+  <img alt="The Now view: solar, house, grid and battery as tiles with 24-hour sparklines, a state-of-charge gauge, and today's produced, consumed, imported, exported, charged and discharged totals." src="docs/dashboard-now.png" width="100%">
+</p>
+
+<sub>Part of the <strong>Now</strong> view. The readings come from a simulated
+box used to test the dashboard, not from a real installation.</sub>
+
 | View | Shows |
 | --- | --- |
 | **Now** | Live solar, house, grid and battery with 24-hour sparklines, state of charge, today's totals, and the last three hours as a graph |
