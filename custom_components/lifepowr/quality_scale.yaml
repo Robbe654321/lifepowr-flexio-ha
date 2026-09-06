@@ -1,8 +1,6 @@
 rules:
   # Bronze
-  action-setup:
-    status: exempt
-    comment: The integration registers no service actions.
+  action-setup: done  # learn_solar_model, registered in async_setup
   appropriate-polling: done  # 10 s default, configurable 2-300 s
   brands: todo
   common-modules: done
@@ -11,9 +9,7 @@ rules:
   dependency-transparency:
     status: exempt
     comment: The API client is implemented in the integration; there is no third-party dependency.
-  docs-actions:
-    status: exempt
-    comment: The integration registers no service actions.
+  docs-actions: done
   docs-high-level-description: done
   docs-installation-instructions: done
   docs-removal-instructions: done

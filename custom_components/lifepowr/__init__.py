@@ -8,8 +8,10 @@ from datetime import datetime
 from homeassistant.const import CONF_HOST, Platform
 from homeassistant.core import HomeAssistant, ServiceCall, callback
 from homeassistant.exceptions import ConfigEntryNotReady, ServiceValidationError
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.event import async_track_time_change
+from homeassistant.helpers.typing import ConfigType
 import voluptuous as vol
 
 from .api import FlexioClient, FlexioConnectionError, FlexioError
@@ -29,6 +31,18 @@ from .openmeteo import OpenMeteoClient
 from .solar_forecast import SolarForecastCoordinator
 
 PLATFORMS: list[Platform] = [Platform.NUMBER, Platform.SENSOR]
+
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+
+
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Register the integration's service actions.
+
+    Done here rather than per entry so the action exists whether or not a
+    FlexiObox happens to be loaded, and can say plainly why it cannot run.
+    """
+    _async_register_services(hass)
+    return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: FlexioConfigEntry) -> bool:
@@ -67,7 +81,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: FlexioConfigEntry) -> bo
         )
 
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
-    _async_register_services(hass)
     return True
 
 

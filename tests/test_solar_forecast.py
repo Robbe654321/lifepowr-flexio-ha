@@ -8,6 +8,7 @@ from unittest.mock import patch
 from homeassistant.const import CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ServiceValidationError
+from homeassistant.setup import async_setup_component
 from homeassistant.util import dt as dt_util
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -17,6 +18,9 @@ from custom_components.lifepowr.const import (
     CONF_SOLAR_HISTORY_DAYS,
     DOMAIN,
     SERVICE_LEARN_SOLAR_MODEL,
+)
+from custom_components.lifepowr.diagnostics import (
+    async_get_config_entry_diagnostics,
 )
 from custom_components.lifepowr.openmeteo import ARCHIVE_URL, FORECAST_URL
 from custom_components.lifepowr.solar import Irradiance
@@ -341,3 +345,34 @@ async def test_the_model_powers_a_dark_hour_at_zero(hass, init_solar) -> None:
     assert solar.model.power(
         midnight, midnight + timedelta(hours=1), Irradiance(0.0, 0.0, 0.0)
     ) == 0.0
+
+
+async def test_the_action_exists_without_any_box(hass) -> None:
+    """Registered in async_setup, so it can explain itself rather than vanish.
+
+    An action that disappears when no FlexiObox is loaded gives an automation
+    referencing it nothing to report but "unknown service".
+    """
+    assert await async_setup_component(hass, DOMAIN, {})
+    await hass.async_block_till_done()
+    assert hass.services.has_service(DOMAIN, SERVICE_LEARN_SOLAR_MODEL)
+    with pytest.raises(ServiceValidationError):
+        await hass.services.async_call(
+            DOMAIN, SERVICE_LEARN_SOLAR_MODEL, {}, blocking=True
+        )
+
+
+async def test_diagnostics_carry_the_learned_roof(hass, init_solar) -> None:
+    """So a bug report arrives with the geometry that produced it."""
+    report = await async_get_config_entry_diagnostics(hass, init_solar)
+    model = report["solar_model"]
+    assert model is not None
+    assert len(model["arrays"]) == 2
+    assert model["quality"]["holdout_r2"] > 0.85
+    assert len(model["horizon"]) == 12
+
+
+async def test_diagnostics_without_a_forecast(hass, init_integration) -> None:
+    """The key is present and empty rather than missing."""
+    report = await async_get_config_entry_diagnostics(hass, init_integration)
+    assert report["solar_model"] is None

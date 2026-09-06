@@ -53,6 +53,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   published yet. The gap is now filled from the forecast endpoint's record of
   the recent past, and any remainder is simply left out.
 
+### Changed
+
+- Service actions are registered in `async_setup`, so `learn_solar_model`
+  exists whether or not a FlexiObox is loaded and can say why it cannot run,
+  rather than leaving an automation with "unknown service".
+- Diagnostics carry the learned roof, so a bug report arrives with the
+  geometry that produced it.
+
 ## [0.2.1] — 2026-09-06
 
 ### Fixed
