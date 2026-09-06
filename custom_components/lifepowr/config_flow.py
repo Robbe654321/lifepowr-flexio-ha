@@ -71,7 +71,11 @@ OPTIONS_SCHEMA = vol.Schema(
             # Either kind will do: a power sensor keeps an hourly mean, an
             # energy counter the amount it rose by. The long history worth
             # learning from is often an old inverter's kWh counter.
-            EntitySelectorConfig(domain="sensor", device_class=["power", "energy"])
+            EntitySelectorConfig(
+                domain="sensor",
+                device_class=["power", "energy"],
+                multiple=True,
+            )
         ),
         vol.Required(
             CONF_SOLAR_HISTORY_DAYS, default=DEFAULT_SOLAR_HISTORY_DAYS
@@ -180,10 +184,10 @@ class FlexioOptionsFlow(OptionsFlow):
                 CONF_SOLAR_HISTORY_DAYS: int(user_input[CONF_SOLAR_HISTORY_DAYS]),
             }
             # An empty entity selector means "use the FlexiObox's own solar
-            # sensor", which is stored as the absence of the option rather than
-            # as a blank string.
-            if source := user_input.get(CONF_SOLAR_SOURCE):
-                options[CONF_SOLAR_SOURCE] = source
+            # sensor", which is stored as the absence of the option rather
+            # than as an empty list.
+            if sources := user_input.get(CONF_SOLAR_SOURCE):
+                options[CONF_SOLAR_SOURCE] = sources
             return self.async_create_entry(data=options)
 
         return self.async_show_form(

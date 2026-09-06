@@ -13,9 +13,11 @@ from homeassistant.util import dt as dt_util
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.lifepowr import _solar_sources
 from custom_components.lifepowr.const import (
     CONF_SOLAR_FORECAST,
     CONF_SOLAR_HISTORY_DAYS,
+    CONF_SOLAR_SOURCE,
     DOMAIN,
     SERVICE_LEARN_SOLAR_MODEL,
 )
@@ -422,3 +424,75 @@ def test_unusable_statistic_rows_are_skipped() -> None:
     ]
     # The negative change is a counter reset, floored rather than dropped.
     assert _hourly_power(rows) == [(start, 0.0)]
+
+
+@pytest.mark.parametrize(
+    ("stored", "expected"),
+    [
+        (None, []),
+        ("sensor.old_inverter", ["sensor.old_inverter"]),
+        (["sensor.east", "sensor.west"], ["sensor.east", "sensor.west"]),
+        ([], []),
+    ],
+)
+def test_the_source_option_survives_growing_a_plural(stored, expected) -> None:
+    """It used to hold one entity and now holds several.
+
+    An entry configured before the change still holds a bare string, and a
+    reload must not quietly lose the history it points at.
+    """
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={"host": HOST},
+        options={} if stored is None else {CONF_SOLAR_SOURCE: stored},
+    )
+    assert _solar_sources(entry) == expected
+
+
+async def test_two_inverters_are_learned_as_two_roofs(
+    hass, solar_entry, with_recorder, mock_client, aioclient_mock
+) -> None:
+    """The same roof read through two meters beats their sum.
+
+    Each source is fitted its own planes before they are pooled, so a site
+    with an east array on one inverter and a west array on the other comes
+    back with both rather than an averaged compromise.
+    """
+    aioclient_mock.get(FORECAST_URL, json=_forecast_payload(_hour_floor()))
+    aioclient_mock.get(ARCHIVE_URL, status=404)
+    east = [
+        {"start": s.start.timestamp(), "mean": s.power}
+        for s in synthesise([(30.0, 100.0, 4000.0)], seed=3)
+    ]
+    west = [
+        {"start": s.start.timestamp(), "mean": s.power}
+        for s in synthesise([(30.0, 260.0, 3000.0)], seed=4)
+    ]
+    solar_entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(
+        solar_entry,
+        options={**solar_entry.options, CONF_SOLAR_SOURCE: ["sensor.a", "sensor.b"]},
+    )
+
+    def _statistics(hass, start, end, statistic_ids, period, units, types):
+        return {"sensor.a": east, "sensor.b": west}
+
+    with (
+        patch(
+            "custom_components.lifepowr.solar_forecast.get_instance",
+            return_value=_Recorder(),
+        ),
+        patch(
+            "custom_components.lifepowr.solar_forecast.statistics_during_period",
+            _statistics,
+        ),
+    ):
+        assert await hass.config_entries.async_setup(solar_entry.entry_id)
+        await hass.async_block_till_done(wait_background_tasks=True)
+
+    model = solar_entry.runtime_data.solar.model
+    assert model is not None
+    assert {array.source for array in model.arrays} == {"sensor.a", "sensor.b"}
+    by_source = {array.source: array for array in model.arrays}
+    assert by_source["sensor.a"].azimuth == pytest.approx(100.0, abs=20.0)
+    assert by_source["sensor.b"].azimuth == pytest.approx(260.0, abs=20.0)

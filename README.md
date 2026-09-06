@@ -357,11 +357,13 @@ what tilt is read from.
 ### Honest about what it cannot do
 
 - **It can read someone else's history.** Under **Configure → Production
-  history to learn from**, point it at any sensor with a longer record than
+  history to learn from**, point it at any sensors with a longer record than
   the FlexiObox has — an older inverter integration, for instance. Either a
   power sensor or an energy counter will do, so a kWh meter from a previous
   setup counts. That is often the difference between forecasting today and
-  forecasting next year.
+  forecasting next year. Pick **several** if you have them: two inverters read
+  through two meters describe the same roof twice instead of once, and each is
+  fitted its own planes before they are pooled.
 - **It needs history.** Roughly a year is what pins the tilt down, because
   tilt is read from how production changes with the seasons. It will fit with
   less and say so through a lower held-out score. A brand-new installation has

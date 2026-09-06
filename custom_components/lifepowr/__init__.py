@@ -103,7 +103,7 @@ async def _async_setup_solar(
             hass.config.latitude,
             hass.config.longitude,
         ),
-        entry.options.get(CONF_SOLAR_SOURCE),
+        _solar_sources(entry),
         entry.options.get(CONF_SOLAR_HISTORY_DAYS, DEFAULT_SOLAR_HISTORY_DAYS),
     )
     await solar.async_load_model()
@@ -135,6 +135,18 @@ def _learn_at_night(
         await solar.async_learn()
 
     return _learn
+
+
+def _solar_sources(entry: FlexioConfigEntry) -> list[str]:
+    """Return the entities the roof should be learned from.
+
+    Stored as a list, but an entry configured before the option accepted more
+    than one holds a bare string, and reloading must not lose it.
+    """
+    configured = entry.options.get(CONF_SOLAR_SOURCE) or []
+    if isinstance(configured, str):
+        return [configured]
+    return [str(item) for item in configured]
 
 
 @callback

@@ -126,7 +126,7 @@ class SolarForecastCoordinator(DataUpdateCoordinator[SolarForecast]):
         hass: HomeAssistant,
         config_entry: Any,
         client: OpenMeteoClient,
-        source: str | None,
+        sources: list[str],
         history_days: int,
     ) -> None:
         """Initialise the coordinator."""
@@ -138,7 +138,7 @@ class SolarForecastCoordinator(DataUpdateCoordinator[SolarForecast]):
             update_interval=SOLAR_FORECAST_INTERVAL,
         )
         self.client = client
-        self.source = source
+        self.sources = sources
         self.entry_id = config_entry.entry_id
         self.history_days = min(history_days, MAX_SOLAR_HISTORY_DAYS)
         self.model: SolarModel | None = None
@@ -149,19 +149,25 @@ class SolarForecastCoordinator(DataUpdateCoordinator[SolarForecast]):
         )
 
     @property
-    def statistic_id(self) -> str | None:
-        """Return the entity whose history the roof is learned from.
+    def statistic_ids(self) -> list[str]:
+        """Return the entities whose history the roof is learned from.
 
         Resolved on use rather than at setup. The FlexiObox's own solar sensor
         is registered by the sensor platform, which is forwarded *after* this
         coordinator is built, so looking it up any earlier finds nothing on a
         fresh install and would postpone the first fit to the next restart.
+
+        More than one is worth having. A site with two inverters read through
+        two meters is a strictly richer measurement than their sum -- the same
+        roof, described twice instead of once -- and the fit treats each as its
+        own set of planes before pooling them.
         """
-        if self.source:
-            return self.source
-        return er.async_get(self.hass).async_get_entity_id(
+        if self.sources:
+            return list(self.sources)
+        own = er.async_get(self.hass).async_get_entity_id(
             SENSOR_DOMAIN, DOMAIN, f"{self.entry_id}_{KEY_PV_POWER}"
         )
+        return [own] if own else []
 
     async def async_load_model(self) -> SolarModel | None:
         """Restore the model learned by a previous run, if it still fits here."""
@@ -197,7 +203,7 @@ class SolarForecastCoordinator(DataUpdateCoordinator[SolarForecast]):
                 "Only %d hours of solar history for %s so far; "
                 "the roof cannot be learned yet",
                 len(samples),
-                self.statistic_id or "the solar production sensor",
+                ", ".join(self.statistic_ids) or "the solar production sensor",
             )
             return None
 
@@ -243,8 +249,8 @@ class SolarForecastCoordinator(DataUpdateCoordinator[SolarForecast]):
         cannot be reached the samples go out bare and :func:`~.learning.fit`
         falls back on its own cloudless-sky model.
         """
-        statistic_id = self.statistic_id
-        if statistic_id is None:
+        statistic_ids = self.statistic_ids
+        if not statistic_ids:
             LOGGER.warning(
                 "No solar production sensor to learn from; the roof cannot "
                 "be worked out yet"
@@ -259,17 +265,16 @@ class SolarForecastCoordinator(DataUpdateCoordinator[SolarForecast]):
                 self.hass,
                 start,
                 end,
-                {statistic_id},
+                set(statistic_ids),
                 _PERIOD,
                 _UNITS,
                 _TYPES,
             )
         )
-        series = rows.get(statistic_id, [])
-        if not series:
+        if not any(rows.get(statistic_id) for statistic_id in statistic_ids):
             LOGGER.warning(
                 "No recorded statistics for %s between %s and %s",
-                statistic_id,
+                ", ".join(statistic_ids),
                 start,
                 end,
             )
@@ -277,18 +282,19 @@ class SolarForecastCoordinator(DataUpdateCoordinator[SolarForecast]):
 
         sky = await self._async_history_sky(start, end)
         samples: list[PowerSample] = []
-        for hour_start, watts in _hourly_power(series):
-            matched = sky.get(hour_start)
-            samples.append(
-                PowerSample(
-                    start=hour_start,
-                    end=hour_start + timedelta(hours=1),
-                    power=watts,
-                    source=statistic_id,
-                    sky=matched.sky if matched else None,
-                    temperature=matched.temperature if matched else None,
+        for statistic_id in statistic_ids:
+            for hour_start, watts in _hourly_power(rows.get(statistic_id, [])):
+                matched = sky.get(hour_start)
+                samples.append(
+                    PowerSample(
+                        start=hour_start,
+                        end=hour_start + timedelta(hours=1),
+                        power=watts,
+                        source=statistic_id,
+                        sky=matched.sky if matched else None,
+                        temperature=matched.temperature if matched else None,
+                    )
                 )
-            )
         LOGGER.debug(
             "Collected %d hours of history, %d of them with measured irradiance",
             len(samples),

@@ -36,7 +36,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   FlexiObox has, including an old inverter's kWh counter: an energy statistic
   is read through the recorder's own per-hour `change`, which is safer than
   differencing a running total by hand. For many installations that is the
-  difference between forecasting today and forecasting next year.
+  difference between forecasting today and forecasting next year. Several can
+  be given: a site with two inverters is described twice rather than once, and
+  each meter is fitted its own planes before they are pooled, which recovers
+  noticeably sharper geometry than their sum.
 - The forecast can be picked as the solar forecast source on the Energy
   dashboard, where Home Assistant draws it behind the production bars — so it
   is checked against reality every day on the same chart.
