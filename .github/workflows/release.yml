@@ -30,7 +30,7 @@ jobs:
           zip -r ../../lifepowr.zip . -x "*__pycache__*"
 
       - name: Publish
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: lifepowr.zip
           generate_release_notes: true
