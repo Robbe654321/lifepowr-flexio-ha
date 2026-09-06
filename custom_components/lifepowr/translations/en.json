@@ -46,7 +46,7 @@
         "data_description": {
           "scan_interval": "Seconds between readings. Default 10, minimum 2. The FlexiO app itself refreshes every few seconds.",
           "solar_forecast": "Works out the tilt, compass bearing and peak power of every plane of panels from what your installation has already produced, then forecasts the coming days from the weather. Needs the recorder, and fetches irradiance from Open-Meteo.",
-          "solar_source": "Leave empty to use the FlexiObox's own solar production sensor. Point this at another sensor if an older inverter integration holds more history.",
+          "solar_source": "Leave empty to use the FlexiObox's own solar production sensor. Point this at another sensor — power or energy, whichever has the longer history — if an older inverter integration recorded more of it.",
           "solar_history_days": "A full year covers every angle the sun reaches here, which is what pins the tilt down. More is better and only makes the nightly fit a little slower."
         }
       }

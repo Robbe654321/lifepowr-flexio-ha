@@ -32,6 +32,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Six sensors: expected production now, today, the rest of today, tomorrow,
   when today should peak, and a diagnostic that shows the learned roof with
   the quality of the fit.
+- The roof can be learned from any sensor with a longer record than the
+  FlexiObox has, including an old inverter's kWh counter: an energy statistic
+  is read through the recorder's own per-hour `change`, which is safer than
+  differencing a running total by hand. For many installations that is the
+  difference between forecasting today and forecasting next year.
 - The forecast can be picked as the solar forecast source on the Energy
   dashboard, where Home Assistant draws it behind the production bars — so it
   is checked against reality every day on the same chart.

@@ -68,7 +68,10 @@ OPTIONS_SCHEMA = vol.Schema(
             CONF_SOLAR_FORECAST, default=DEFAULT_SOLAR_FORECAST
         ): BooleanSelector(),
         vol.Optional(CONF_SOLAR_SOURCE): EntitySelector(
-            EntitySelectorConfig(domain="sensor", device_class="power")
+            # Either kind will do: a power sensor keeps an hourly mean, an
+            # energy counter the amount it rose by. The long history worth
+            # learning from is often an old inverter's kWh counter.
+            EntitySelectorConfig(domain="sensor", device_class=["power", "energy"])
         ),
         vol.Required(
             CONF_SOLAR_HISTORY_DAYS, default=DEFAULT_SOLAR_HISTORY_DAYS

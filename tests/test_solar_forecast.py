@@ -25,7 +25,7 @@ from custom_components.lifepowr.diagnostics import (
 from custom_components.lifepowr.energy import async_get_solar_forecast
 from custom_components.lifepowr.openmeteo import ARCHIVE_URL, FORECAST_URL
 from custom_components.lifepowr.solar import Irradiance
-from custom_components.lifepowr.solar_forecast import SolarForecast
+from custom_components.lifepowr.solar_forecast import SolarForecast, _hourly_power
 
 from .conftest import ENTRY_ID, HOST
 from .test_learning import LAT, LON, synthesise
@@ -392,3 +392,33 @@ async def test_no_energy_forecast_without_a_roof(hass, init_integration) -> None
     """The dashboard is told there is none, rather than shown an empty line."""
     assert await async_get_solar_forecast(hass, init_integration.entry_id) is None
     assert await async_get_solar_forecast(hass, "does-not-exist") is None
+
+
+def test_a_power_statistic_is_read_as_watts() -> None:
+    """The FlexiObox's own solar sensor keeps an hourly mean, already in watts."""
+    start = datetime(2024, 6, 21, 10, 0, tzinfo=UTC)
+    rows = [{"start": start.timestamp(), "mean": 2500.0}]
+    assert _hourly_power(rows) == [(start, 2500.0)]
+
+
+def test_an_energy_counter_is_read_as_watts_too() -> None:
+    """An old inverter's kWh counter is often the only long history there is.
+
+    A kilowatt-hour delivered over one hour is a thousand watts, so the hour's
+    change converts straight across.
+    """
+    start = datetime(2024, 6, 21, 10, 0, tzinfo=UTC)
+    rows = [{"start": start.timestamp(), "change": 2.5}]
+    assert _hourly_power(rows) == [(start, 2500.0)]
+
+
+def test_unusable_statistic_rows_are_skipped() -> None:
+    """A gap in the recorder is missing data, not an hour of darkness."""
+    start = datetime(2024, 6, 21, 10, 0, tzinfo=UTC)
+    rows = [
+        {"start": start.timestamp(), "mean": None, "change": None},
+        {"start": None, "mean": 100.0},
+        {"start": start.timestamp(), "change": -0.5},
+    ]
+    # The negative change is a counter reset, floored rather than dropped.
+    assert _hourly_power(rows) == [(start, 0.0)]

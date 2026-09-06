@@ -46,7 +46,7 @@
         "data_description": {
           "scan_interval": "Seconden tussen metingen. Standaard 10, minimum 2. De FlexiO-app zelf ververst ook om de paar seconden.",
           "solar_forecast": "Leidt de helling, de windrichting en het piekvermogen van elk vlak panelen af uit wat je installatie al opgebracht heeft, en voorspelt daarmee de komende dagen op basis van het weer. Heeft de recorder nodig en haalt de instraling bij Open-Meteo.",
-          "solar_source": "Laat leeg om de zonneproductiesensor van de FlexiObox zelf te gebruiken. Wijs een andere sensor aan als een oudere omvormerintegratie meer geschiedenis heeft.",
+          "solar_source": "Laat leeg om de zonneproductiesensor van de FlexiObox zelf te gebruiken. Wijs een andere sensor aan — vermogen of energie, wat de langste geschiedenis heeft — als een oudere omvormerintegratie meer bijgehouden heeft.",
           "solar_history_days": "Een vol jaar bevat elke stand die de zon hier bereikt, en dat is wat de helling vastlegt. Meer is beter en maakt de nachtelijke berekening alleen wat trager."
         }
       }

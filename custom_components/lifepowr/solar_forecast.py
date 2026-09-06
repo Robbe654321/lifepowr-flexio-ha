@@ -15,6 +15,7 @@ two, which is far too long for the event loop, so it runs in an executor.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from functools import partial
@@ -43,9 +44,22 @@ from .openmeteo import ARCHIVE_LAG, MAX_HISTORY_DAYS, OpenMeteoClient, OpenMeteo
 from .parsing import KEY_PV_POWER
 
 #: Statistics shorter than an hour are not kept forever, so the fit reads the
-#: hourly means that are. An hour is coarse next to the sun's motion, which is
+#: hourly ones that are. An hour is coarse next to the sun's motion, which is
 #: why every model value is averaged over the same hour before comparison.
 _PERIOD = "hour"
+
+#: Ask for both, because either kind of sensor will do. A power sensor keeps a
+#: ``mean``; an energy counter keeps a ``change``, the amount it went up by
+#: during the hour. Letting the recorder work the increase out is safer than
+#: differencing the running total here, where an off-by-one row would shift
+#: every sample an hour and turn the roof fifteen degrees.
+_TYPES = {"mean", "change"}
+
+#: Units the statistics are normalised to, whichever the sensor itself uses.
+_UNITS = {"energy": "kWh", "power": "W"}
+
+#: Watts that one kilowatt-hour delivered over one hour comes to.
+_KWH_PER_HOUR_IN_WATTS = 1000.0
 
 #: Below this the recorder has not yet seen enough of the year.
 MIN_HISTORY_HOURS = 200
@@ -247,8 +261,8 @@ class SolarForecastCoordinator(DataUpdateCoordinator[SolarForecast]):
                 end,
                 {statistic_id},
                 _PERIOD,
-                None,
-                {"mean"},
+                _UNITS,
+                _TYPES,
             )
         )
         series = rows.get(statistic_id, [])
@@ -263,19 +277,13 @@ class SolarForecastCoordinator(DataUpdateCoordinator[SolarForecast]):
 
         sky = await self._async_history_sky(start, end)
         samples: list[PowerSample] = []
-        for row in series:
-            mean = row.get("mean")
-            if mean is None:
-                continue
-            hour_start = _as_datetime(row["start"])
-            if hour_start is None:
-                continue
+        for hour_start, watts in _hourly_power(series):
             matched = sky.get(hour_start)
             samples.append(
                 PowerSample(
                     start=hour_start,
                     end=hour_start + timedelta(hours=1),
-                    power=max(float(mean), 0.0),
+                    power=watts,
                     source=statistic_id,
                     sky=matched.sky if matched else None,
                     temperature=matched.temperature if matched else None,
@@ -349,6 +357,28 @@ class SolarForecastCoordinator(DataUpdateCoordinator[SolarForecast]):
             ),
             model=model,
         )
+
+
+def _hourly_power(series: Sequence[Any]) -> list[tuple[datetime, float]]:
+    """Return average watts per hour, from a power or an energy statistic.
+
+    Either kind of sensor will do, which matters because the history worth
+    learning from is often an old inverter's energy counter rather than a
+    power reading. A power sensor keeps an hourly ``mean``, already in watts.
+    An energy counter keeps a ``change``, the kilowatt-hours it went up by
+    during that hour -- and a kilowatt-hour delivered over one hour is a
+    thousand watts, so the conversion is just the scale.
+    """
+    hours: list[tuple[datetime, float]] = []
+    for row in series:
+        when = _as_datetime(row.get("start"))
+        if when is None:
+            continue
+        if (mean := row.get("mean")) is not None:
+            hours.append((when, max(float(mean), 0.0)))
+        elif (change := row.get("change")) is not None:
+            hours.append((when, max(float(change), 0.0) * _KWH_PER_HOUR_IN_WATTS))
+    return hours
 
 
 def _same_place(model: SolarModel, hass: HomeAssistant) -> bool:
