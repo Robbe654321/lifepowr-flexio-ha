@@ -21,6 +21,12 @@ ignore = [
 # Printing is how they report, their thresholds read better inline than as
 # named constants, and check_box's report is one deliberately linear pass.
 "scripts/*" = ["T201", "PLR2004", "PLR0912", "PLR0915"]
+# Published solar algorithms: their coefficients are the citation, and naming
+# each one individually would obscure rather than explain the formula. The
+# transposition and fitting entry points genuinely take a physical model's
+# worth of arguments.
+"custom_components/lifepowr/solar.py" = ["PLR0913", "PLR2004"]
+"custom_components/lifepowr/learning.py" = ["PLR0912", "PLR0913"]
 
 [tool.ruff.lint.isort]
 force-sort-within-sections = true
