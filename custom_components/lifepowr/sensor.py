@@ -27,7 +27,13 @@ from homeassistant.helpers.typing import StateType
 from . import api
 from .coordinator import FlexioConfigEntry, FlexioCoordinator
 from .energy import ENERGY_SENSORS, FlexioEnergySensor
-from .entity import FlexioEntity
+from .entity import FlexioEntity, build_device_info
+from .solar_sensor import (
+    MODEL_DESCRIPTION,
+    FlexioSolarModelSensor,
+    FlexioSolarSensor,
+    build_descriptions,
+)
 
 PARALLEL_UPDATES = 0
 
@@ -159,7 +165,7 @@ async def async_setup_entry(
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up the FlexiO sensors."""
-    coordinator = entry.runtime_data
+    coordinator = entry.runtime_data.coordinator
     entities: list[SensorEntity] = [
         FlexioSensor(coordinator, description)
         for description in SENSORS
@@ -174,6 +180,19 @@ async def async_setup_entry(
     ]
     if coordinator.client.converter is not None:
         entities.append(FlexioConverterSensor(coordinator, CONVERTER_DESCRIPTION))
+
+    if (solar := entry.runtime_data.solar) is not None:
+        device_info = build_device_info(entry.entry_id, coordinator.client)
+        entities += [
+            FlexioSolarSensor(solar, description, device_info, entry.entry_id)
+            for description in build_descriptions(hass)
+        ]
+        entities.append(
+            FlexioSolarModelSensor(
+                solar, MODEL_DESCRIPTION, device_info, entry.entry_id
+            )
+        )
+
     async_add_entities(entities)
 
 

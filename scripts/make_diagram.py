@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-W, H = 940, 512
+W, H = 940, 588
 
 LIGHT = {
     "bg": "#ffffff",
@@ -71,6 +71,10 @@ COLUMNS = [
             ("accent", "Derives battery = inv − PV"),  # noqa: RUF001
             ("gap", ""),
             ("muted", "polls every 10 s, tunable"),
+            ("gap", ""),
+            ("text", "Learns the roof overnight"),
+            ("text", "from recorder statistics"),
+            ("muted", "tilt · bearing · kW · skyline"),
         ],
     },
     {
@@ -89,12 +93,16 @@ COLUMNS = [
             ("gap", ""),
             ("text", "1 number"),
             ("muted", "generic load price cap"),
+            ("gap", ""),
+            ("accent", "6 solar forecasts"),
+            ("muted", "optional; the roof, learned"),
+            ("muted", "from its own history"),
         ],
     },
 ]
 
-BOX_Y, BOX_H = 92, 268
-BAND_Y, BAND_H = 422, 66
+BOX_Y, BOX_H = 92, 344
+BAND_Y, BAND_H = 498, 66
 
 
 def esc(text: str) -> str:
@@ -118,8 +126,9 @@ def build(c: dict[str, str]) -> str:
         ),
         (
             f'<text x="24" y="64" font-family="{FONT}" font-size="13" '
-            f'fill="{c["muted"]}">Everything stays on your network. '
-            f"No cloud, no account, no authentication.</text>"
+            f'fill="{c["muted"]}">The box stays on your network. '
+            f"No account, no authentication. Only the optional solar "
+            f"forecast reaches out, for the weather.</text>"
         ),
     ]
 

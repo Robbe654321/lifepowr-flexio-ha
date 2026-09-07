@@ -6,6 +6,88 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-09-06
+
+### Added
+
+- **A solar forecast that works the roof out for itself.** Tilt, compass
+  bearing and peak power per plane of panels are what every solar forecast
+  asks for and almost nobody knows, and an installation that grew over time
+  faces several directions at once. These are now recovered from the hourly
+  production statistics the recorder already holds, by asking which
+  combination of candidate orientations reproduces the measured history — a
+  non-negative least squares problem, whose solution is naturally sparse, so
+  only the orientations really on the roof survive.
+
+  Shading is learned alongside the panels: one skyline height per compass
+  direction, because a fit denied a skyline explains a missing evening by
+  turning the panels east instead. The skyline is held continuous, since a
+  plane's capacity and the trees in front of it are partly interchangeable
+  and an unconstrained search cuts a notch exactly where an array faces.
+
+  How many planes a roof gets, and whether a skyline earns its place, are
+  decided on days held out of the fit rather than on how well they flatter the
+  days they were fitted on.
+
+- Six sensors: expected production now, today, the rest of today, tomorrow,
+  when today should peak, and a diagnostic that shows the learned roof with
+  the quality of the fit.
+- The roof can be learned from any sensor with a longer record than the
+  FlexiObox has, including an old inverter's kWh counter: an energy statistic
+  is read through the recorder's own per-hour `change`, which is safer than
+  differencing a running total by hand. For many installations that is the
+  difference between forecasting today and forecasting next year. Several can
+  be given: a site with two inverters is described twice rather than once, and
+  each meter is fitted its own planes before they are pooled, which recovers
+  noticeably sharper geometry than their sum. A meter that only re-reads what
+  the others already saw — the one that replaced two string inverters, say —
+  is detected where the records overlap and left out rather than counted
+  twice; where they do not overlap it cannot be detected, and the log says so.
+- The forecast can be picked as the solar forecast source on the Energy
+  dashboard, where Home Assistant draws it behind the production bars — so it
+  is checked against reality every day on the same chart.
+- `lifepowr.learn_solar_model`, to redo the fit immediately after adding
+  panels rather than waiting for the nightly run.
+- Irradiance from [Open-Meteo](https://open-meteo.com/), free and without an
+  API key. It is the only part of the integration that leaves the local
+  network, it is opt-in with the forecast, and it sends nothing but the
+  site's coordinates. Without it the fit falls back on its own cloudless-sky
+  model, which works offline and scores measurably worse.
+
+### Fixed
+
+- A modelled sky and a measured one are never mixed in the same fit. They
+  disagree about how a cloudless sky splits into direct beam and diffuse
+  glow, and a fit shown both reads that disagreement as geometry: on a
+  synthetic roof of one south-facing plane, five percent of mismatched hours
+  were enough to return a north-facing plane and a vertical one, and 43% too
+  much capacity. The window now uses one kind of sky throughout.
+- A few hours without measured irradiance no longer discard the rest. The
+  reanalysis archive trails real time by several days, so the most recent
+  hours routinely arrive bare, and an all-or-nothing test would have dropped a
+  whole year of measured irradiance because the last two days of it were not
+  published yet. The gap is now filled from the forecast endpoint's record of
+  the recent past, and any remainder is simply left out.
+
+- Whether a source counts watts or kilowatt-hours is decided by what the
+  sensor says it measures, not by which statistic field happens to exist. An
+  energy counter recorded as a plain measurement also keeps an hourly mean,
+  and that mean is the average reading of a rising counter — low in the
+  morning, highest just before it resets at midnight. Read as watts it is the
+  exact shape of a west-facing roof, and the fit would have reported one. Such
+  a source is now skipped with an explanation instead. Where the entity is
+  gone entirely — the inverter replaced, its integration removed, its
+  statistics still in the database — the statistic's own recorded unit
+  answers instead.
+
+### Changed
+
+- Service actions are registered in `async_setup`, so `learn_solar_model`
+  exists whether or not a FlexiObox is loaded and can say why it cannot run,
+  rather than leaving an automation with "unknown service".
+- Diagnostics carry the learned roof, so a bug report arrives with the
+  geometry that produced it.
+
 ## [0.2.1] — 2026-09-06
 
 ### Fixed
@@ -101,7 +183,8 @@ The API also signs consumption negative. Grid power and household consumption
 are negated so they read positively in Home Assistant; battery flow keeps its
 raw sign, where positive already means discharging.
 
-[Unreleased]: https://github.com/Robbe654321/lifepowr-flexio-ha/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/Robbe654321/lifepowr-flexio-ha/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/Robbe654321/lifepowr-flexio-ha/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/Robbe654321/lifepowr-flexio-ha/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/Robbe654321/lifepowr-flexio-ha/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Robbe654321/lifepowr-flexio-ha/releases/tag/v0.1.0

@@ -14,6 +14,9 @@ from homeassistant.const import CONF_HOST, CONF_SCAN_INTERVAL
 from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
+    BooleanSelector,
+    EntitySelector,
+    EntitySelectorConfig,
     NumberSelector,
     NumberSelectorConfig,
     NumberSelectorMode,
@@ -25,13 +28,20 @@ import voluptuous as vol
 
 from .api import FlexioClient, FlexioConnectionError, FlexioError
 from .const import (
+    CONF_SOLAR_FORECAST,
+    CONF_SOLAR_HISTORY_DAYS,
+    CONF_SOLAR_SOURCE,
     DEFAULT_HOST,
     DEFAULT_NAME,
     DEFAULT_SCAN_INTERVAL,
+    DEFAULT_SOLAR_FORECAST,
+    DEFAULT_SOLAR_HISTORY_DAYS,
     DOMAIN,
     LOGGER,
     MAX_SCAN_INTERVAL,
+    MAX_SOLAR_HISTORY_DAYS,
     MIN_SCAN_INTERVAL,
+    MIN_SOLAR_HISTORY_DAYS,
 )
 
 STEP_USER_DATA_SCHEMA = vol.Schema(
@@ -53,7 +63,31 @@ OPTIONS_SCHEMA = vol.Schema(
                 mode=NumberSelectorMode.BOX,
                 unit_of_measurement="s",
             )
-        )
+        ),
+        vol.Required(
+            CONF_SOLAR_FORECAST, default=DEFAULT_SOLAR_FORECAST
+        ): BooleanSelector(),
+        vol.Optional(CONF_SOLAR_SOURCE): EntitySelector(
+            # Either kind will do: a power sensor keeps an hourly mean, an
+            # energy counter the amount it rose by. The long history worth
+            # learning from is often an old inverter's kWh counter.
+            EntitySelectorConfig(
+                domain="sensor",
+                device_class=["power", "energy"],
+                multiple=True,
+            )
+        ),
+        vol.Required(
+            CONF_SOLAR_HISTORY_DAYS, default=DEFAULT_SOLAR_HISTORY_DAYS
+        ): NumberSelector(
+            NumberSelectorConfig(
+                min=MIN_SOLAR_HISTORY_DAYS,
+                max=MAX_SOLAR_HISTORY_DAYS,
+                step=1,
+                mode=NumberSelectorMode.BOX,
+                unit_of_measurement="d",
+            )
+        ),
     }
 )
 
@@ -137,16 +171,24 @@ class FlexioConfigFlow(ConfigFlow, domain=DOMAIN):
 
 
 class FlexioOptionsFlow(OptionsFlow):
-    """Let the user trade network chatter for resolution."""
+    """Let the user trade network chatter for resolution, and learn the roof."""
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Manage the poll interval."""
+        """Manage the poll interval and the solar forecast."""
         if user_input is not None:
-            return self.async_create_entry(
-                data={CONF_SCAN_INTERVAL: int(user_input[CONF_SCAN_INTERVAL])}
-            )
+            options = {
+                CONF_SCAN_INTERVAL: int(user_input[CONF_SCAN_INTERVAL]),
+                CONF_SOLAR_FORECAST: bool(user_input[CONF_SOLAR_FORECAST]),
+                CONF_SOLAR_HISTORY_DAYS: int(user_input[CONF_SOLAR_HISTORY_DAYS]),
+            }
+            # An empty entity selector means "use the FlexiObox's own solar
+            # sensor", which is stored as the absence of the option rather
+            # than as an empty list.
+            if sources := user_input.get(CONF_SOLAR_SOURCE):
+                options[CONF_SOLAR_SOURCE] = sources
+            return self.async_create_entry(data=options)
 
         return self.async_show_form(
             step_id="init",
