@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 import random
 
@@ -15,6 +16,7 @@ from custom_components.lifepowr.learning import (
     PowerSample,
     SolarModel,
     _prepare,
+    calibrate,
     fit,
     nnls,
     select_clear_intervals,
@@ -388,3 +390,142 @@ def test_a_meter_reading_different_panels_is_kept() -> None:
     assert {array.source for array in model.arrays} == {"east", "west", "south"}
     assert model.peak_power == pytest.approx(10500.0, rel=0.2)
     assert COMBINED_TOLERANCE < 0.5
+
+
+def _roof(
+    arrays: list[tuple[float, float, float]], *, ac_limit: float | None = None
+) -> SolarModel:
+    """Return a model of a roof we chose, with no fit behind it."""
+    return SolarModel(
+        arrays=tuple(
+            Array(tilt=tilt, azimuth=azimuth, peak_power=peak)
+            for tilt, azimuth, peak in arrays
+        ),
+        latitude=LAT,
+        longitude=LON,
+        altitude=ALT,
+        quality=FitQuality(0, 0, 0.0, 0.0, 0.0, 0.0),
+        created=datetime(2024, 1, 1, tzinfo=UTC),
+        temperature_coefficient=0.0,
+        ac_limit=ac_limit,
+    )
+
+
+def _metered(
+    model: SolarModel,
+    *,
+    days: int,
+    gain: float = 1.0,
+    seed: int = 3,
+    sky: bool = True,
+) -> list[PowerSample]:
+    """Return production that carries the sky which produced it.
+
+    Unlike :func:`synthesise` this is what the recorder plus the irradiance
+    archive hand over together: a measured hour with a measured sky beside it.
+    ``gain`` is the factor calibration is meant to find again.
+    """
+    rng = random.Random(seed)
+    samples: list[PowerSample] = []
+    start = datetime(2024, 6, 1, tzinfo=UTC)
+    for day in range(days):
+        clarity = 1.0 if rng.random() < 0.4 else rng.uniform(0.6, 1.0)
+        for hour in range(24):
+            begin = start + timedelta(days=day, hours=hour)
+            end = begin + timedelta(hours=1)
+            measured = _mean_clear_sky(begin, end).scaled(clarity)
+            if measured.ghi <= 0.0:
+                continue
+            samples.append(
+                PowerSample(
+                    start=begin,
+                    end=end,
+                    power=model.power(begin, end, measured) * gain,
+                    sky=measured if sky else None,
+                )
+            )
+    return samples
+
+
+def test_calibrate_recovers_a_known_gain() -> None:
+    """A roof delivering a fifth more than it was fitted for is rescaled."""
+    roof = _roof([(30.0, 180.0, 6000.0)])
+    tuned = calibrate(roof, _metered(roof, days=14, gain=1.2))
+    assert tuned.gain == pytest.approx(1.2, rel=0.02)
+    assert tuned.rated_power == pytest.approx(7200.0, rel=0.02)
+    # The geometry is untouched: that is the whole point of separating them.
+    assert tuned.arrays == roof.arrays
+
+
+def test_calibrate_leaves_an_unchanged_roof_alone() -> None:
+    """Production that matches the fit must not nudge the scale."""
+    roof = _roof([(35.0, 200.0, 5000.0), (15.0, 250.0, 4000.0)])
+    tuned = calibrate(roof, _metered(roof, days=14))
+    assert tuned.gain == pytest.approx(1.0, abs=0.02)
+
+
+def test_calibrate_needs_a_measured_sky() -> None:
+    """Against a modelled sky the ratio is the cloud cover, not the hardware.
+
+    Every hour here really did deliver what the roof should, but under cloud.
+    Calibrating on the cloudless model would read that shortfall as a smaller
+    roof and shrink a perfectly good fit.
+    """
+    roof = _roof([(30.0, 180.0, 6000.0)])
+    tuned = calibrate(roof, _metered(roof, days=14, sky=False))
+    assert tuned.gain == 1.0
+
+
+def test_calibrate_refuses_an_impossible_ratio() -> None:
+    """Six times the prediction is a wrong sensor, not a better inverter."""
+    roof = _roof([(30.0, 180.0, 6000.0)])
+    tuned = calibrate(roof, _metered(roof, days=14, gain=6.0))
+    assert tuned.gain == 1.0
+
+
+def test_calibrate_needs_more_than_a_day() -> None:
+    """One day's bright hours are an anecdote."""
+    roof = _roof([(30.0, 180.0, 6000.0)])
+    tuned = calibrate(roof, _metered(roof, days=1, gain=1.2))
+    assert tuned.gain == 1.0
+
+
+def test_calibrate_carries_the_ceiling_with_the_scale() -> None:
+    """A clamp read off the old hardware would eat the whole rescaling."""
+    roof = _roof([(30.0, 180.0, 6000.0)])
+    samples = _metered(roof, days=14, gain=1.2)
+    capped = calibrate(_roof([(30.0, 180.0, 6000.0)], ac_limit=5000.0), samples)
+    assert capped.ac_limit is not None
+    assert capped.ac_limit == pytest.approx(5000.0 * capped.gain, rel=1e-6)
+
+
+def test_calibrating_twice_is_not_cumulative() -> None:
+    """The gain is an absolute scale, so re-running it must settle."""
+    roof = _roof([(30.0, 180.0, 6000.0)], ac_limit=5000.0)
+    samples = _metered(roof, days=14, gain=1.2)
+    once = calibrate(roof, samples)
+    twice = calibrate(once, samples)
+    assert twice.gain == pytest.approx(once.gain, rel=1e-6)
+    assert twice.ac_limit == pytest.approx(once.ac_limit, rel=1e-6)
+
+
+def test_the_gain_scales_what_the_model_predicts() -> None:
+    """Nothing is learned twice: the gain multiplies the planes' output."""
+    roof = _roof([(30.0, 180.0, 6000.0)])
+    when = datetime(2024, 6, 21, 11, tzinfo=UTC)
+    sky = _mean_clear_sky(when, when + timedelta(hours=1))
+    plain = roof.power(when, when + timedelta(hours=1), sky)
+    scaled = replace(roof, gain=1.5).power(when, when + timedelta(hours=1), sky)
+    assert scaled == pytest.approx(plain * 1.5)
+
+
+def test_a_gain_survives_a_round_trip() -> None:
+    """A rescaled roof must come back rescaled after a restart."""
+    roof = replace(_roof([(30.0, 180.0, 6000.0)]), gain=1.17)
+    assert SolarModel.from_dict(roof.as_dict()).gain == pytest.approx(1.17)
+
+
+def test_calibrate_without_planes_is_a_no_op() -> None:
+    """Before anything is learned there is no shape to rescale."""
+    empty = _roof([])
+    assert calibrate(empty, []) is empty

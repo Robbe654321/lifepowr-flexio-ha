@@ -37,7 +37,7 @@ sharper selection improves the geometry.
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 import math
 from operator import mul
@@ -274,11 +274,25 @@ class SolarModel:
     #: Learned skyline: how high trees and neighbouring roofs stand in each
     #: compass direction. Flat when nothing was found, or nothing was needed.
     horizon: Horizon = NO_HORIZON
+    #: Everything the planes make, scaled by this. Geometry needs a year of
+    #: seasons to pin down; how much the hardware behind it currently delivers
+    #: needs only a few bright days, and the two change on different clocks --
+    #: replace an inverter and the roof is the same while the yield is not.
+    gain: float = 1.0
 
     @property
     def peak_power(self) -> float:
-        """Return the total learned capacity, W."""
+        """Return the capacity the planes were fitted to, W."""
         return sum(array.peak_power for array in self.arrays)
+
+    @property
+    def rated_power(self) -> float:
+        """Return the capacity the roof is currently delivering, W.
+
+        The fitted capacity times the gain: what the model actually predicts
+        today, which is the number worth showing.
+        """
+        return self.peak_power * self.gain
 
     def power(
         self,
@@ -296,6 +310,7 @@ class SolarModel:
             if not position.is_up:
                 continue
             total += weight * self._instant_power(position, sky, temperature)
+        total *= self.gain
         if self.ac_limit is not None:
             total = min(total, self.ac_limit)
         return total
@@ -338,6 +353,7 @@ class SolarModel:
             "temperature_coefficient": self.temperature_coefficient,
             "albedo": self.albedo,
             "horizon": self.horizon.as_list(),
+            "gain": round(self.gain, 4),
         }
 
     @classmethod
@@ -362,6 +378,7 @@ class SolarModel:
                 if (stored := data.get("horizon")) and len(stored) == HORIZON_SECTORS
                 else NO_HORIZON
             ),
+            gain=float(data.get("gain", 1.0)),
         )
 
 
@@ -1170,6 +1187,110 @@ def _drop_combined_sources(intervals: list[_Interval]) -> list[_Interval]:
     return [
         interval for interval in intervals if interval.sample.source not in redundant
     ]
+
+
+#: Ratios outside this band are not a rescaled roof, they are a broken
+#: measurement -- a sensor in the wrong unit, or one that is not the panels at
+#: all -- and following them would wreck a model that took a year to learn.
+GAIN_LIMITS: Final = (0.4, 2.5)
+
+#: Hours below this share of the learned capacity carry too little signal:
+#: their ratio is dominated by the inverter's own poor efficiency down there.
+MIN_GAIN_HOUR: Final = 0.15
+
+#: Below this the rescaling is not worth mentioning in the log.
+GAIN_WORTH_SAYING: Final = 0.02
+
+#: Fewer than this and the ratio is an anecdote.
+MIN_GAIN_HOURS: Final = 24
+
+
+def calibrate(
+    model: SolarModel,
+    samples: Iterable[PowerSample],
+    *,
+    linke: float | None = None,
+) -> SolarModel:
+    """Return the model rescaled to what a meter is reporting now.
+
+    Geometry and yield move on different clocks. Which way the panels face
+    takes a year of seasons to establish and then never changes; how much the
+    hardware behind them delivers can change overnight, when an inverter is
+    replaced or a string is rewired. A model that has to relearn its geometry
+    before it can notice that is a model that is wrong for a year.
+
+    So the shape is kept and only the scale is refitted, from the ratio
+    between what a meter reports and what the planes predict. That needs a few
+    bright days rather than a season, which is exactly what is available after
+    a change. The median is taken, so a single freak hour cannot move it, and
+    the result is refused outright if it lands somewhere no rescaled roof
+    could be -- a ratio of five is a broken sensor, not a better inverter.
+    """
+    if not model.arrays:
+        return model
+    intervals = [
+        interval
+        for interval in _prepare(
+            samples, model.latitude, model.longitude, model.altitude, linke
+        )
+        # Only against a sky that was measured. Compared with a *modelled*
+        # cloudless sky the ratio is the clear-sky index, which is below one
+        # almost always -- calibrating on that would scale a perfectly good
+        # roof down by however cloudy the fortnight happened to be.
+        if interval.sample.sky is not None
+    ]
+    columns = [
+        _column(
+            array.tilt,
+            array.azimuth,
+            intervals,
+            model.albedo,
+            model.temperature_coefficient,
+            horizon=model.horizon,
+        )
+        for array in model.arrays
+    ]
+    floor = model.peak_power * MIN_GAIN_HOUR
+    ratios: list[float] = []
+    for index, interval in enumerate(intervals):
+        expected = sum(
+            array.peak_power * column[index]
+            for array, column in zip(model.arrays, columns, strict=True)
+        )
+        if expected >= floor and interval.sample.power > 0.0:
+            ratios.append(interval.sample.power / expected)
+
+    if len(ratios) < MIN_GAIN_HOURS:
+        LOGGER.debug(
+            "Only %d bright hours with a measured sky to calibrate against; "
+            "leaving the scale alone",
+            len(ratios),
+        )
+        return model
+
+    gain = _quantile(ratios, 0.5)
+    lowest, highest = GAIN_LIMITS
+    if not lowest <= gain <= highest:
+        LOGGER.warning(
+            "Measured production is %.1fx what the learned roof predicts, which "
+            "is too far out to be a rescaled roof; leaving the scale alone and "
+            "assuming the meter is not measuring the panels",
+            gain,
+        )
+        return model
+    if abs(gain - 1.0) > GAIN_WORTH_SAYING:
+        LOGGER.info(
+            "Rescaling the learned roof by %.2f against %d recent bright hours: "
+            "the panels are the same, what is behind them delivers differently",
+            gain,
+            len(ratios),
+        )
+    # The ceiling was read off the old hardware's own output, so it has to
+    # travel with the scale. Left where it was it would clip the rescaled
+    # curve back to the old inverter's midday plateau -- exactly the hours the
+    # rescaling exists to fix.
+    ceiling = None if model.ac_limit is None else model.ac_limit * gain / model.gain
+    return replace(model, gain=gain, ac_limit=ceiling)
 
 
 def _gather(

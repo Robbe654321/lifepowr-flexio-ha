@@ -325,11 +325,14 @@ Nothing to enter.
   the panels east instead.
 - **The inverter's ceiling**, so a forecast never predicts more than the
   hardware can deliver.
+- **How much the hardware currently delivers**, refitted separately from the
+  geometry so that replacing an inverter does not cost you a year — see
+  [When the hardware changes](#when-the-hardware-changes).
 
 `sensor.flexio_learned_solar_capacity` is the diagnostic that shows the
-working: its state is the total learned capacity and its attributes list every
-plane, when the fit last ran, and how well it reproduces days that were held
-out of it.
+working: its state is what the roof delivers today and its attributes list
+every plane, the `gain` and the `fitted_power` it was applied to, when the fit
+last ran, and how well it reproduces days that were held out of it.
 
 **Read the planes for what they are: the effective plane of each measured
 source, not a survey of your roof.** One inverter often carries panels from
@@ -352,6 +355,41 @@ say, while the per-plane tilt was out by nearly twenty degrees on one plane.
 > lands near 9 kW. That gap is not an error in the fit; it is the difference
 > between a label and a roof, and it is the reason a forecast built on the
 > label runs high.
+
+### When the hardware changes
+
+Geometry and yield move on different clocks. Which way the panels face takes a
+year of seasons to establish and then never changes. How much the hardware
+behind them delivers can change overnight — a new inverter, a rewired string —
+and a model that has to relearn its geometry before it can notice is a model
+that is wrong until a full year of new records exists.
+
+So the two are fitted separately. The planes come from the long history; the
+scale is refitted every night from the last three weeks of the FlexiObox's own
+production, as the ratio between what it reported and what the planes predict
+for the sky that was actually measured over those hours. A fortnight of decent
+weather is enough. The result appears as the `gain` attribute, and 1.0 means
+the fit and the meter agree.
+
+Three things keep it from doing harm:
+
+- Only hours with a **measured** sky count. Against a modelled cloudless sky
+  the ratio would be the clear-sky index, below one nearly always, and would
+  shrink a perfectly good roof by however cloudy the fortnight was.
+- The **median** over at least 24 bright hours, so a single freak hour cannot
+  move it.
+- A ratio **outside 0.4–2.5 is refused**. That is a sensor in the wrong unit,
+  or one that is not the panels at all — not a better inverter.
+
+The learned AC ceiling is scaled along with it, since it was read off the old
+hardware's own output and would otherwise clip the corrected curve back to the
+old inverter's midday plateau.
+
+This also covers the far end of the same problem. If the sensor the geometry
+was learned from is retired, its records eventually fall out of the recorder's
+window and no fit can run at all — while the roof, of course, has not moved.
+The nightly job then keeps the learned planes and rescales them, rather than
+freezing both halves.
 
 ### Where the numbers come from
 

@@ -8,6 +8,36 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- The learned roof now carries a **gain**: geometry and yield are fitted
+  separately, because they change on different clocks. Which way the panels
+  face takes a year of seasons to pin down and then never changes; how much
+  the hardware behind them delivers can change overnight, when an inverter is
+  replaced or a string is rewired. Previously a change like that could only be
+  corrected by relearning the geometry from a year of records the new hardware
+  has not produced yet — so the forecast stayed wrong for a year. Now the
+  shape is kept and only the scale is refitted, from the last three weeks of
+  the FlexiObox's own production against what the planes predict for the sky
+  that was actually measured over those hours. That takes a fortnight of
+  bright weather rather than a season.
+  - Only hours with a *measured* sky count. Against a modelled cloudless sky
+    the ratio is the clear-sky index, which is below one nearly always, and
+    calibrating on it would shrink a perfectly good roof by however cloudy the
+    fortnight happened to be.
+  - The median is taken over at least 24 bright hours, so one freak hour
+    cannot move it, and a ratio outside 0.4–2.5 is refused outright: that is a
+    sensor in the wrong unit or one that is not the panels at all, not a
+    better inverter.
+  - The learned AC ceiling travels with the scale. Read off the old hardware's
+    own output, left where it was it would clip the rescaled curve back to the
+    old inverter's midday plateau — exactly the hours the rescaling exists to
+    fix.
+  - `Learned solar capacity` now reports what the roof delivers today; the
+    `gain` and `fitted_power` attributes say what the fit itself came to. The
+    per-plane figures are scaled too, so they still add up to the state.
+  - When the records the geometry came from finally age out of the recorder,
+    no fit can run at all — and the roof still has not moved. The nightly job
+    now keeps the learned planes and rescales them, instead of leaving both
+    halves frozen.
 - The hourly series is published on `Solar forecast now` as the `forecast`
   attribute, so it can be charted with a card of your own rather than only on
   the Energy dashboard. The README has an apexcharts-card example and the
