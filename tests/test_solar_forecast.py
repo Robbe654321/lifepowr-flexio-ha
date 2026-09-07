@@ -5,6 +5,9 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
+from homeassistant.components.energy.websocket_api import (
+    async_get_energy_platforms,
+)
 from homeassistant.const import CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ServiceValidationError
@@ -611,3 +614,36 @@ async def test_the_hourly_series_is_published_for_charting(hass, init_solar) -> 
     assert stamps == sorted(stamps)
     # Only the one sensor carries it; the rest stay light.
     assert "forecast" not in hass.states.get(TODAY_SENSOR).attributes
+
+
+async def test_the_energy_dashboard_offers_us_as_a_forecast(hass, init_solar) -> None:
+    """The dashboard has to *find* the forecast before it can draw it.
+
+    Home Assistant loads each integration's `energy` platform and offers the
+    ones exposing async_get_solar_forecast. If that platform ever stops being
+    importable the integration silently disappears from the dashboard's
+    forecast list, with nothing else broken to explain it -- so the discovery
+    itself is asserted, both orderings, since the energy component is normally
+    up before a custom integration finishes loading.
+    """
+    assert await async_setup_component(hass, "energy", {})
+    await hass.async_block_till_done()
+    assert DOMAIN in await async_get_energy_platforms(hass)
+
+
+async def test_discovery_survives_energy_loading_first(
+    hass, solar_entry, with_recorder, mock_client, mock_history, aioclient_mock
+) -> None:
+    """Which is the order a real Home Assistant uses."""
+    aioclient_mock.get(FORECAST_URL, json=_forecast_payload(_hour_floor()))
+    aioclient_mock.get(ARCHIVE_URL, status=404)
+    assert await async_setup_component(hass, "energy", {})
+    await hass.async_block_till_done()
+    # The list is cached the first time anything asks, before we exist.
+    assert DOMAIN not in await async_get_energy_platforms(hass)
+
+    solar_entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(solar_entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert DOMAIN in await async_get_energy_platforms(hass)

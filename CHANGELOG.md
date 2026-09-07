@@ -15,6 +15,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- The energy platform no longer imports from the `energy` component at module
+  scope. That made this file's importability depend on that component being
+  loadable at the moment the integration starts, and a failed import does not
+  announce itself: the platform is simply skipped, and the integration is
+  absent from the Energy dashboard's forecast list with nothing else broken to
+  explain it. The type is now imported for typing only, and the discovery
+  itself is asserted in both load orders.
 - `Solar forecast now` no longer holds perfectly still for an hour and then
   jumps. It was returning the mean of whichever hour contained the moment,
   which is defensible and reads as a sensor that has stopped updating. An
