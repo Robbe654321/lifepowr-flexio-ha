@@ -400,7 +400,7 @@ def test_a_power_statistic_is_read_as_watts() -> None:
     """The FlexiObox's own solar sensor keeps an hourly mean, already in watts."""
     start = datetime(2024, 6, 21, 10, 0, tzinfo=UTC)
     rows = [{"start": start.timestamp(), "mean": 2500.0}]
-    assert _hourly_power(rows) == [(start, 2500.0)]
+    assert _hourly_power(rows, measures_energy=False) == [(start, 2500.0)]
 
 
 def test_an_energy_counter_is_read_as_watts_too() -> None:
@@ -411,7 +411,20 @@ def test_an_energy_counter_is_read_as_watts_too() -> None:
     """
     start = datetime(2024, 6, 21, 10, 0, tzinfo=UTC)
     rows = [{"start": start.timestamp(), "change": 2.5}]
-    assert _hourly_power(rows) == [(start, 2500.0)]
+    assert _hourly_power(rows, measures_energy=True) == [(start, 2500.0)]
+
+
+def test_an_energy_counter_is_never_read_as_a_mean() -> None:
+    """This is the trap the device class exists to close.
+
+    A daily-yield counter recorded as a plain measurement also keeps a mean,
+    and that mean is the average reading of a rising counter: low in the
+    morning, highest just before it resets at midnight. Read as watts it is
+    the perfect shape of a west-facing roof, and the fit would report one.
+    """
+    start = datetime(2024, 6, 21, 10, 0, tzinfo=UTC)
+    rows = [{"start": start.timestamp(), "mean": 8400.0}]
+    assert _hourly_power(rows, measures_energy=True) == []
 
 
 def test_unusable_statistic_rows_are_skipped() -> None:
@@ -423,7 +436,7 @@ def test_unusable_statistic_rows_are_skipped() -> None:
         {"start": start.timestamp(), "change": -0.5},
     ]
     # The negative change is a counter reset, floored rather than dropped.
-    assert _hourly_power(rows) == [(start, 0.0)]
+    assert _hourly_power(rows, measures_energy=True) == [(start, 0.0)]
 
 
 @pytest.mark.parametrize(

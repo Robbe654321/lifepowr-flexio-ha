@@ -23,7 +23,11 @@ from typing import Any
 
 from homeassistant.components.recorder import get_instance
 from homeassistant.components.recorder.statistics import statistics_during_period
-from homeassistant.components.sensor import DOMAIN as SENSOR_DOMAIN
+from homeassistant.components.sensor import (
+    DOMAIN as SENSOR_DOMAIN,
+    SensorDeviceClass,
+)
+from homeassistant.const import ATTR_DEVICE_CLASS
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.storage import Store
@@ -283,7 +287,20 @@ class SolarForecastCoordinator(DataUpdateCoordinator[SolarForecast]):
         sky = await self._async_history_sky(start, end)
         samples: list[PowerSample] = []
         for statistic_id in statistic_ids:
-            for hour_start, watts in _hourly_power(rows.get(statistic_id, [])):
+            measures_energy = _measures_energy(self.hass, statistic_id)
+            hourly = _hourly_power(
+                rows.get(statistic_id, []), measures_energy=measures_energy
+            )
+            if rows.get(statistic_id) and not hourly:
+                LOGGER.warning(
+                    "%s records no usable hourly statistics: it is an %s "
+                    "sensor, so the roof needs its hourly increase, which "
+                    "Home Assistant only keeps for a total or "
+                    "total_increasing state class",
+                    statistic_id,
+                    "energy" if measures_energy else "unrecognised",
+                )
+            for hour_start, watts in hourly:
                 matched = sky.get(hour_start)
                 samples.append(
                     PowerSample(
@@ -365,7 +382,9 @@ class SolarForecastCoordinator(DataUpdateCoordinator[SolarForecast]):
         )
 
 
-def _hourly_power(series: Sequence[Any]) -> list[tuple[datetime, float]]:
+def _hourly_power(
+    series: Sequence[Any], *, measures_energy: bool
+) -> list[tuple[datetime, float]]:
     """Return average watts per hour, from a power or an energy statistic.
 
     Either kind of sensor will do, which matters because the history worth
@@ -374,17 +393,43 @@ def _hourly_power(series: Sequence[Any]) -> list[tuple[datetime, float]]:
     An energy counter keeps a ``change``, the kilowatt-hours it went up by
     during that hour -- and a kilowatt-hour delivered over one hour is a
     thousand watts, so the conversion is just the scale.
+
+    Which one to read is decided by what the sensor says it measures, never by
+    which field happens to be present. An energy counter recorded as a plain
+    measurement also keeps a ``mean``, and that mean is the average reading of
+    a rising counter: a number that climbs all day and drops at midnight. Read
+    as watts it looks exactly like a roof facing west, and the fit would say so
+    with a straight face. Better to return nothing and let the caller explain.
     """
     hours: list[tuple[datetime, float]] = []
     for row in series:
         when = _as_datetime(row.get("start"))
         if when is None:
             continue
-        if (mean := row.get("mean")) is not None:
+        if measures_energy:
+            if (change := row.get("change")) is not None:
+                hours.append((when, max(float(change), 0.0) * _KWH_PER_HOUR_IN_WATTS))
+        elif (mean := row.get("mean")) is not None:
             hours.append((when, max(float(mean), 0.0)))
-        elif (change := row.get("change")) is not None:
-            hours.append((when, max(float(change), 0.0) * _KWH_PER_HOUR_IN_WATTS))
     return hours
+
+
+def _measures_energy(hass: HomeAssistant, entity_id: str) -> bool:
+    """Return True when an entity counts kilowatt-hours rather than watts.
+
+    Asked of the entity registry as well as the state machine, because the
+    sensor worth learning from may belong to hardware that has since been
+    removed, and an entity with no state still remembers what it measured.
+    """
+    if (state := hass.states.get(entity_id)) is not None and (
+        declared := state.attributes.get(ATTR_DEVICE_CLASS)
+    ):
+        return bool(declared == SensorDeviceClass.ENERGY)
+    entry = er.async_get(hass).async_get(entity_id)
+    if entry is None:
+        return False
+    device_class = entry.device_class or entry.original_device_class
+    return bool(device_class == SensorDeviceClass.ENERGY)
 
 
 def _same_place(model: SolarModel, hass: HomeAssistant) -> bool:

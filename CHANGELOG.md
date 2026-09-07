@@ -69,6 +69,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   published yet. The gap is now filled from the forecast endpoint's record of
   the recent past, and any remainder is simply left out.
 
+- Whether a source counts watts or kilowatt-hours is decided by what the
+  sensor says it measures, not by which statistic field happens to exist. An
+  energy counter recorded as a plain measurement also keeps an hourly mean,
+  and that mean is the average reading of a rising counter — low in the
+  morning, highest just before it resets at midnight. Read as watts it is the
+  exact shape of a west-facing roof, and the fit would have reported one. Such
+  a source is now skipped with an explanation instead.
+
 ### Changed
 
 - Service actions are registered in `async_setup`, so `learn_solar_model`
