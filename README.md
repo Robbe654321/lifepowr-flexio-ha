@@ -331,6 +331,20 @@ working: its state is the total learned capacity and its attributes list every
 plane, when the fit last ran, and how well it reproduces days that were held
 out of it.
 
+**Read the planes for what they are: the effective plane of each measured
+source, not a survey of your roof.** One inverter often carries panels from
+more than one roof plane, and the single plane that best explains such a
+mixture comes out steeper and turned further from south than anything actually
+up there. It forecasts that source well — measurably better than the true
+angles do, because it absorbs the shading too — while describing no real
+plane. So do not work panel counts out from how the capacity splits between
+them: that assumes each plane is one orientation carrying its own honest share
+of the losses, which a mixture is not.
+
+The total is the solid number. On the installation this was developed against
+it came out within a few percent of what PVGIS and the measured energy both
+say, while the per-plane tilt was out by nearly twenty degrees on one plane.
+
 > **A learned capacity reads lower than the number on your panels, and should.**
 > It is *delivered AC power at 1000 W/m² on the panels themselves* — inverter
 > efficiency, wiring, soiling, mismatch and any permanent shading are already
@@ -380,9 +394,13 @@ what tilt is read from.
   less and say so through a lower held-out score. A brand-new installation has
   nothing to learn from yet; it will start on its own once the recorder has
   enough.
-- **Bearing is firmer than tilt.** Bearing follows from the time of day
-  production peaks, which is unambiguous. Tilt is entangled with how hazy the
-  sky is assumed to be, and the two can trade against each other.
+- **Bearing is firmer than tilt, but only on a steep plane.** Bearing follows
+  from the time of day production peaks. Tilt is entangled with how hazy the
+  sky is assumed to be, and the two trade against each other. Worse, the two
+  weaknesses compound: a shallow plane barely has a bearing to find, since at
+  14° of tilt every bearing from east to west lands within 14% of due south,
+  against 29% at 45°. A confident bearing on a plane the fit thinks is steep
+  may be neither.
 - **Several inverters are better than one.** The same roof read through two
   meters is a strictly richer measurement than their sum, and is fitted
   separately before the planes are pooled.

@@ -6,6 +6,30 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- The diagnostic sensor and the README no longer present the learned planes as
+  a survey of the roof. They are the effective plane of each measured *source*,
+  which is a weaker claim: one inverter often carries panels from more than one
+  roof plane, and the single plane that best explains such a mixture comes out
+  steeper and turned further from south than anything up there. Measured on a
+  real installation whose owner knew the answer, a fitted plane read 32° where
+  the roof is 14°, and forecast that inverter distinctly *better* than the true
+  angle did (held-out R² 0.76 against 0.57) because it also absorbs the
+  shading. On the site total the two were indistinguishable, 0.6636 against
+  0.6628.
+
+  So panel counts must not be derived from how the capacity splits between the
+  planes: that assumes each plane is one orientation carrying its own honest
+  share of the losses, which a mixture is not. The total capacity remains the
+  solid number — on that installation within a few percent of both PVGIS and
+  the measured energy.
+
+  Also noted: a shallow plane barely has a bearing to find. At 14° of tilt
+  every bearing from east to west lands within 14% of due south, against 29%
+  at 45°, so a confident bearing on a plane the fit believes is steep may be
+  neither.
+
 ## [0.3.0] — 2026-09-06
 
 ### Added

@@ -149,12 +149,26 @@ class FlexioSolarSensor(FlexioSolarEntity, SensorEntity):
 
 
 class FlexioSolarModelSensor(FlexioSolarEntity, SensorEntity):
-    """The roof the integration believes it is looking at.
+    """What the integration fitted, and how well it fits.
 
-    Its state is the total learned capacity; the attributes are the planes it
-    was split into, and how well the whole thing reproduces days held out of
-    the fit. Where those numbers disagree with the roof, the disagreement is
-    the useful part: they were measured, not assumed.
+    The state is the total learned capacity, and that is the number to trust:
+    it is pinned by the brightest hours of the year and can be checked against
+    a reference like PVGIS.
+
+    The planes in the attributes are a weaker claim, and worth reading for
+    what they are: **the effective plane of each measured source, not a survey
+    of the roof.** One inverter often carries panels from more than one roof
+    plane, and the single plane that best explains such a mixture is steeper
+    and turned further from south than anything actually up there. It forecasts
+    that source well -- better, measurably, than the true angles do, since it
+    also absorbs the shading -- while describing no real plane.
+
+    Two consequences. Panel counts must not be derived from how the capacity
+    splits between these planes; that assumes each plane is one orientation
+    with its own honest share of the losses, which a mixture is not. And a
+    shallow plane's bearing is barely observable at all: at 14 degrees of tilt
+    every bearing from east to west lands within 14% of due south, against 29%
+    at 45 degrees, so the fit can be confidently wrong about it.
     """
 
     @property
