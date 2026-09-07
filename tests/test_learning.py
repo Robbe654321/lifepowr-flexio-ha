@@ -529,3 +529,45 @@ def test_calibrate_without_planes_is_a_no_op() -> None:
     """Before anything is learned there is no shape to rescale."""
     empty = _roof([])
     assert calibrate(empty, []) is empty
+
+
+def test_the_gain_follows_the_energy_not_the_hour_count() -> None:
+    """The scale predicts kilowatt-hours, so it is fitted to kilowatt-hours.
+
+    This roof delivers 30% more than the fit expects in its brightest hours
+    and exactly what it expects in the rest. There are more of the rest, so
+    the middle of the hourly ratios sits near 1.0 -- while most of the day's
+    energy is in the hours that are 30% up. Take the median and the forecast
+    stays low at precisely the hours that matter.
+    """
+    roof = _roof([(30.0, 180.0, 6000.0)])
+    plain = _metered(roof, days=14)
+    brightest = max(sample.power for sample in plain)
+    lifted = [
+        PowerSample(
+            start=sample.start,
+            end=sample.end,
+            power=sample.power * (1.3 if sample.power > 0.6 * brightest else 1.0),
+            sky=sample.sky,
+        )
+        for sample in plain
+    ]
+    # The lifted hours really are outvoted, which is the whole trap.
+    floor = 0.15 * 6000.0
+    counted = [sample for sample in plain if sample.power > floor]
+    raised = [sample for sample in counted if sample.power > 0.6 * brightest]
+    assert len(raised) * 2 < len(counted)
+
+    assert calibrate(roof, lifted).gain > 1.15
+
+
+def test_one_freak_hour_cannot_move_the_gain() -> None:
+    """An inverter restarting mid-hour must not rescale the whole roof."""
+    roof = _roof([(30.0, 180.0, 6000.0)])
+    samples = _metered(roof, days=14, gain=1.2)
+    honest = calibrate(roof, samples).gain
+
+    spiked = list(samples)
+    hottest = max(range(len(spiked)), key=lambda index: spiked[index].power)
+    spiked[hottest] = replace(spiked[hottest], power=spiked[hottest].power * 5)
+    assert calibrate(roof, spiked).gain == pytest.approx(honest, rel=0.02)

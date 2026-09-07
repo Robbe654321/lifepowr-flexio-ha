@@ -376,8 +376,12 @@ Three things keep it from doing harm:
 - Only hours with a **measured** sky count. Against a modelled cloudless sky
   the ratio would be the clear-sky index, below one nearly always, and would
   shrink a perfectly good roof by however cloudy the fortnight was.
-- The **median** over at least 24 bright hours, so a single freak hour cannot
-  move it.
+- It is fitted to **energy**, over at least 24 bright hours: the ratio of the
+  totals, after the most and least favourable tenth of the hours are dropped.
+  The trimming is what stops one freak hour moving it. An average of the
+  hourly ratios would not do — that counts a 2 kW hour and a 9 kW hour as one
+  vote each, while the 9 kW hour is most of the day's kilowatt-hours, so it
+  lands low and keeps the forecast low at exactly the hours that matter.
 - A ratio **outside 0.4–2.5 is refused**. That is a sensor in the wrong unit,
   or one that is not the panels at all — not a better inverter.
 
