@@ -517,6 +517,7 @@ def _prepare(
     longitude: float,
     altitude: float,
     linke: float | None,
+    *,
     use_measured: bool = True,
 ) -> list[_Interval]:
     """Precompute sun positions and skies for every usable interval.
@@ -576,6 +577,7 @@ def _column(
     intervals: Sequence[_Interval],
     albedo: float,
     coefficient: float,
+    *,
     horizon: Horizon | None = None,
 ) -> list[float]:
     """Return one candidate orientation's yield per watt-peak, per interval."""
@@ -726,6 +728,7 @@ def _refine(
     target: Sequence[float],
     albedo: float,
     coefficient: float,
+    *,
     horizon: Horizon | None = None,
 ) -> tuple[list[tuple[float, float]], list[float], float]:
     """Polish the plane angles off the dictionary grid by pattern search.
@@ -745,7 +748,7 @@ def _refine(
         key = (round(tilt, 2), round(azimuth, 2) % 360.0)
         if key not in cache:
             cache[key] = _column(
-                key[0], key[1], intervals, albedo, coefficient, horizon
+                key[0], key[1], intervals, albedo, coefficient, horizon=horizon
             )
         return cache[key]
 
@@ -852,6 +855,7 @@ def _score(
     capacities: Sequence[float],
     albedo: float,
     coefficient: float,
+    *,
     horizon: Horizon | None = None,
 ) -> tuple[float, float, float]:
     """Return RMSE, MAE and R² of one set of planes over some intervals."""
@@ -860,7 +864,7 @@ def _score(
     estimate = [0.0] * len(intervals)
     for (tilt, azimuth), capacity in zip(angles, capacities, strict=True):
         for index, value in enumerate(
-            _column(tilt, azimuth, intervals, albedo, coefficient, horizon)
+            _column(tilt, azimuth, intervals, albedo, coefficient, horizon=horizon)
         ):
             estimate[index] += capacity * value
     measured = [interval.sample.power for interval in intervals]
@@ -880,6 +884,7 @@ def _pooled_score(
     arrays: Sequence[Array],
     albedo: float,
     coefficient: float,
+    *,
     horizon: Horizon | None = None,
 ) -> tuple[float, float, float]:
     """Return RMSE, MAE and R² of a whole model over intervals of any source.
@@ -899,7 +904,12 @@ def _pooled_score(
             if array.source != source:
                 continue
             column = _column(
-                array.tilt, array.azimuth, subset, albedo, coefficient, horizon
+                array.tilt,
+                array.azimuth,
+                subset,
+                albedo,
+                coefficient,
+                horizon=horizon,
             )
             for offset, index in enumerate(indices):
                 estimate[index] += array.peak_power * column[offset]
@@ -1182,7 +1192,7 @@ def _gather(
 
     def prepared(use_measured: bool) -> list[_Interval]:
         intervals = _prepare(
-            samples, latitude, longitude, altitude, linke, use_measured
+            samples, latitude, longitude, altitude, linke, use_measured=use_measured
         )
         return [intervals[index] for index in _drop_clipped(intervals)]
 
@@ -1274,6 +1284,7 @@ def _add_horizon(
     arrays: tuple[Array, ...],
     checking: Sequence[_Interval],
     holdout_r2: float,
+    *,
     albedo: float,
     coefficient: float,
 ) -> tuple[tuple[Array, ...], Horizon, float]:
@@ -1297,7 +1308,7 @@ def _add_horizon(
             target,
             albedo,
             coefficient,
-            candidate,
+            horizon=candidate,
         )
         shaded.extend(
             Array(tilt=tilt, azimuth=azimuth, peak_power=capacity, source=plan.source)
@@ -1308,7 +1319,7 @@ def _add_horizon(
         return arrays, NO_HORIZON, holdout_r2
 
     improved = tuple(sorted(shaded, key=lambda array: array.peak_power, reverse=True))
-    score = _pooled_score(checking, improved, albedo, coefficient, candidate)[2]
+    score = _pooled_score(checking, improved, albedo, coefficient, horizon=candidate)[2]
     if score > holdout_r2 + MIN_HORIZON_GAIN:
         return improved, candidate, score
     return arrays, NO_HORIZON, holdout_r2
@@ -1429,15 +1440,20 @@ def fit(
     arrays = tuple(sorted(found, key=lambda array: array.peak_power, reverse=True))
     horizon = NO_HORIZON
     holdout_r2 = _pooled_score(
-        checking_intervals, arrays, albedo, coefficient, horizon
+        checking_intervals, arrays, albedo, coefficient, horizon=horizon
     )[2]
 
     arrays, horizon, holdout_r2 = _add_horizon(
-        plans, arrays, checking_intervals, holdout_r2, albedo, coefficient
+        plans,
+        arrays,
+        checking_intervals,
+        holdout_r2,
+        albedo=albedo,
+        coefficient=coefficient,
     )
 
     rmse, mae, r2 = _pooled_score(
-        training_intervals, arrays, albedo, coefficient, horizon
+        training_intervals, arrays, albedo, coefficient, horizon=horizon
     )
 
     ceiling = sum(

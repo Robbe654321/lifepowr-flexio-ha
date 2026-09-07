@@ -397,6 +397,7 @@ def plane_of_array(
     azimuth: float,
     position: SolarPosition,
     sky: Irradiance,
+    *,
     albedo: float = DEFAULT_ALBEDO,
     horizon: Horizon | None = None,
 ) -> float:

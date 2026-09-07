@@ -25,6 +25,7 @@ LAT, LON, ALT = 51.05, 3.72, 10.0
 
 def synthesise(
     arrays: list[tuple[float, float, float]],
+    *,
     days: int = 300,
     seed: int = 7,
     cloudiness: float = 0.55,
