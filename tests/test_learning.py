@@ -9,6 +9,7 @@ import pytest
 
 from custom_components.lifepowr import solar
 from custom_components.lifepowr.learning import (
+    COMBINED_TOLERANCE,
     Array,
     FitQuality,
     PowerSample,
@@ -329,3 +330,60 @@ def test_a_learned_skyline_is_continuous() -> None:
         for index in range(len(heights))
     ]
     assert max(steps) <= 25.0
+
+
+def _relabel(samples: list[PowerSample], source: str) -> list[PowerSample]:
+    """Return the same samples, attributed to a named meter."""
+    return [
+        PowerSample(
+            start=sample.start,
+            end=sample.end,
+            power=sample.power,
+            source=source,
+        )
+        for sample in samples
+    ]
+
+
+def test_two_meters_on_two_roofs_are_added_up() -> None:
+    """Which is the whole point of allowing more than one."""
+    east = _relabel(synthesise([(30.0, 100.0, 4000.0)], seed=11), "east")
+    west = _relabel(synthesise([(30.0, 260.0, 3000.0)], seed=12), "west")
+    model = fit(east + west, LAT, LON, ALT)
+    assert model is not None
+    assert {array.source for array in model.arrays} == {"east", "west"}
+    assert model.peak_power == pytest.approx(7000.0, rel=0.2)
+
+
+def test_a_meter_that_re_reads_the_others_is_left_out() -> None:
+    """Otherwise the roof doubles.
+
+    Pointing the fit at two string inverters and the meter that now covers
+    both of them is an easy mistake to make -- it is exactly what replacing
+    two inverters with one leaves behind -- and adding their capacities up
+    would answer with twice the roof.
+    """
+    east = _relabel(synthesise([(30.0, 100.0, 4000.0)], seed=11), "east")
+    west = _relabel(synthesise([(30.0, 260.0, 3000.0)], seed=12), "west")
+    combined = [
+        PowerSample(
+            start=a.start, end=a.end, power=a.power + b.power, source="whole house"
+        )
+        for a, b in zip(east, west, strict=True)
+    ]
+    model = fit(east + west + combined, LAT, LON, ALT)
+    assert model is not None
+    assert "whole house" not in {array.source for array in model.arrays}
+    assert model.peak_power == pytest.approx(7000.0, rel=0.2)
+
+
+def test_a_meter_reading_different_panels_is_kept() -> None:
+    """The check must not throw away a genuine third array."""
+    east = _relabel(synthesise([(30.0, 100.0, 4000.0)], seed=11), "east")
+    west = _relabel(synthesise([(30.0, 260.0, 3000.0)], seed=12), "west")
+    south = _relabel(synthesise([(30.0, 180.0, 3500.0)], seed=13), "south")
+    model = fit(east + west + south, LAT, LON, ALT)
+    assert model is not None
+    assert {array.source for array in model.arrays} == {"east", "west", "south"}
+    assert model.peak_power == pytest.approx(10500.0, rel=0.2)
+    assert COMBINED_TOLERANCE < 0.5

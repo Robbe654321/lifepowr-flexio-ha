@@ -39,7 +39,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   difference between forecasting today and forecasting next year. Several can
   be given: a site with two inverters is described twice rather than once, and
   each meter is fitted its own planes before they are pooled, which recovers
-  noticeably sharper geometry than their sum.
+  noticeably sharper geometry than their sum. A meter that only re-reads what
+  the others already saw — the one that replaced two string inverters, say —
+  is detected where the records overlap and left out rather than counted
+  twice; where they do not overlap it cannot be detected, and the log says so.
 - The forecast can be picked as the solar forecast source on the Energy
   dashboard, where Home Assistant draws it behind the production bars — so it
   is checked against reality every day on the same chart.

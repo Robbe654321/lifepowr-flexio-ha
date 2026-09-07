@@ -43,6 +43,7 @@ import math
 from operator import mul
 from typing import Any, Final
 
+from .const import LOGGER
 from .solar import (
     DEFAULT_ALBEDO,
     HORIZON_SECTORS,
@@ -786,6 +787,14 @@ def _refine(
 #: year to pin its geometry down, and no model is produced for it.
 MIN_FIT_SAMPLES: Final = 60
 
+#: With one meter there is nothing to compare it against.
+MIN_SOURCES_TO_COMPARE: Final = 2
+
+#: A source whose output over the hours it shares with the others comes this
+#: close to their sum is not measuring more panels -- it is measuring the same
+#: panels again, further down the wiring.
+COMBINED_TOLERANCE: Final = 0.15
+
 #: Share of intervals that must carry a measured sky before the fit works in
 #: measured mode at all. A reanalysis trails real time by a few days, so the
 #: most recent hours routinely arrive bare; without this an all-or-nothing
@@ -1084,6 +1093,75 @@ def _fit_horizon(
 MIN_HOLDOUT_GAIN: Final = 0.002
 
 
+def _drop_combined_sources(intervals: list[_Interval]) -> list[_Interval]:
+    """Remove a meter that is only re-measuring what the others already saw.
+
+    Capacities from different sources are added together, which is right when
+    each meter watches its own array and badly wrong when one of them watches
+    all of them. That configuration is easy to arrive at honestly -- point the
+    fit at two old string inverters and the new one that replaced them, and
+    the roof doubles.
+
+    A combined meter gives itself away wherever it overlaps the others: its
+    output over those hours is their sum. The finer-grained meters are the
+    ones worth keeping, since a roof read through several is described better
+    than through one.
+    """
+    grouped: dict[str, dict[datetime, float]] = {}
+    for interval in intervals:
+        grouped.setdefault(interval.sample.source, {})[interval.sample.start] = (
+            interval.sample.power
+        )
+    if len(grouped) < MIN_SOURCES_TO_COMPARE:
+        return intervals
+
+    redundant = set()
+    for source, series in grouped.items():
+        others = [
+            other for name, other in grouped.items() if name not in {source, *redundant}
+        ]
+        shared = [
+            when
+            for when in series
+            if all(when in other for other in others) and series[when] > 0.0
+        ]
+        if len(shared) < MIN_GROUP:
+            continue
+        mine = sum(series[when] for when in shared)
+        theirs = sum(sum(other[when] for other in others) for when in shared)
+        if theirs > 0.0 and abs(mine - theirs) <= COMBINED_TOLERANCE * theirs:
+            LOGGER.warning(
+                "%s reads the same panels as %s put together, so it is being "
+                "left out of the fit rather than counted twice",
+                source,
+                " and ".join(name for name in grouped if name != source),
+            )
+            redundant.add(source)
+
+    if not redundant:
+        starts = {
+            source: (min(series), max(series)) for source, series in grouped.items()
+        }
+        latest_start = max(first for first, _ in starts.values())
+        earliest_end = min(last for _, last in starts.values())
+        if latest_start > earliest_end:
+            LOGGER.warning(
+                "The sources to learn from cover different periods (%s), so "
+                "whether they measure different panels cannot be checked. "
+                "Their capacities are being added up; if one of them replaced "
+                "the others rather than joining them, learn from only one",
+                ", ".join(
+                    f"{source}: {first:%Y-%m-%d} to {last:%Y-%m-%d}"
+                    for source, (first, last) in starts.items()
+                ),
+            )
+        return intervals
+
+    return [
+        interval for interval in intervals if interval.sample.source not in redundant
+    ]
+
+
 def _gather(
     samples: Sequence[PowerSample],
     latitude: float,
@@ -1108,7 +1186,7 @@ def _gather(
         )
         return [intervals[index] for index in _drop_clipped(intervals)]
 
-    intervals = prepared(use_measured=True)
+    intervals = _drop_combined_sources(prepared(use_measured=True))
     measured = [
         index
         for index, interval in enumerate(intervals)
@@ -1118,7 +1196,7 @@ def _gather(
         return intervals
     if len(measured) >= MEASURED_SHARE * len(intervals):
         return [intervals[index] for index in measured]
-    return prepared(use_measured=False)
+    return _drop_combined_sources(prepared(use_measured=False))
 
 
 def _thin(

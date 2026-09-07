@@ -364,6 +364,11 @@ what tilt is read from.
   forecasting next year. Pick **several** if you have them: two inverters read
   through two meters describe the same roof twice instead of once, and each is
   fitted its own planes before they are pooled.
+
+  Pick meters that watch **different** panels, though. Listing two string
+  inverters *and* the meter that replaced them counts the same roof twice.
+  Where they overlap in time the fit spots that and leaves the combined one
+  out; where they do not overlap it cannot tell, and says so in the log.
 - **It needs history.** Roughly a year is what pins the tilt down, because
   tilt is read from how production changes with the seasons. It will fit with
   less and say so through a lower held-out score. A brand-new installation has
