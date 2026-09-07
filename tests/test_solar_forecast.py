@@ -27,7 +27,11 @@ from custom_components.lifepowr.diagnostics import (
 from custom_components.lifepowr.energy import async_get_solar_forecast
 from custom_components.lifepowr.openmeteo import ARCHIVE_URL, FORECAST_URL
 from custom_components.lifepowr.solar import Irradiance
-from custom_components.lifepowr.solar_forecast import SolarForecast, _hourly_power
+from custom_components.lifepowr.solar_forecast import (
+    SolarForecast,
+    _hourly_power,
+    _measures_energy,
+)
 
 from .conftest import ENTRY_ID, HOST
 from .test_learning import LAT, LON, synthesise
@@ -117,6 +121,12 @@ def mock_history():
         patch(
             "custom_components.lifepowr.solar_forecast.get_instance",
             return_value=_Recorder(),
+        ),
+        patch(
+            "custom_components.lifepowr.solar_forecast.get_metadata",
+            # Empty: these sources are power sensors, and with no metadata and
+            # no entity the reader falls back to reading an hourly mean.
+            return_value={},
         ),
         patch(
             "custom_components.lifepowr.solar_forecast.statistics_during_period",
@@ -311,6 +321,12 @@ async def test_too_little_history_leaves_the_roof_unlearned(
             return_value=_Recorder(),
         ),
         patch(
+            "custom_components.lifepowr.solar_forecast.get_metadata",
+            # Empty: these sources are power sensors, and with no metadata and
+            # no entity the reader falls back to reading an hourly mean.
+            return_value={},
+        ),
+        patch(
             "custom_components.lifepowr.solar_forecast.statistics_during_period",
             lambda *args: {},
         ),
@@ -496,6 +512,12 @@ async def test_two_inverters_are_learned_as_two_roofs(
             return_value=_Recorder(),
         ),
         patch(
+            "custom_components.lifepowr.solar_forecast.get_metadata",
+            # Empty: these sources are power sensors, and with no metadata and
+            # no entity the reader falls back to reading an hourly mean.
+            return_value={},
+        ),
+        patch(
             "custom_components.lifepowr.solar_forecast.statistics_during_period",
             _statistics,
         ),
@@ -509,3 +531,32 @@ async def test_two_inverters_are_learned_as_two_roofs(
     by_source = {array.source: array for array in model.arrays}
     assert by_source["sensor.a"].azimuth == pytest.approx(100.0, abs=20.0)
     assert by_source["sensor.b"].azimuth == pytest.approx(260.0, abs=20.0)
+
+
+async def test_an_orphaned_statistic_is_read_by_its_unit(hass) -> None:
+    """History outlives the hardware that made it.
+
+    Replace an inverter and its integration goes with it, taking the entity
+    but leaving years of statistics in the database. With no entity left to
+    ask, the statistic's own unit says what it counts.
+    """
+    assert _measures_energy(hass, "sensor.gone", {"unit_of_measurement": "kWh"})
+    assert _measures_energy(hass, "sensor.gone", {"unit_of_measurement": "Wh"})
+    assert not _measures_energy(hass, "sensor.gone", {"unit_of_measurement": "W"})
+    # No unit recorded either: a running total is an energy counter.
+    assert _measures_energy(hass, "sensor.gone", {"has_sum": True})
+    assert not _measures_energy(hass, "sensor.gone", {"has_sum": False})
+    assert not _measures_energy(hass, "sensor.gone", None)
+
+
+async def test_a_live_entity_outranks_the_statistic_unit(hass) -> None:
+    """Because only the entity exposes the case worth catching.
+
+    An energy counter recorded as a plain measurement has no sum and may
+    carry no unit the statistics table recognises, yet it is still an energy
+    counter, and reading its mean as watts would invent a west-facing roof.
+    """
+    hass.states.async_set("sensor.daily_yield", "8400", {"device_class": "energy"})
+    assert _measures_energy(
+        hass, "sensor.daily_yield", {"unit_of_measurement": "W", "has_sum": False}
+    )

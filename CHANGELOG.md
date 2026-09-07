@@ -75,7 +75,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and that mean is the average reading of a rising counter — low in the
   morning, highest just before it resets at midnight. Read as watts it is the
   exact shape of a west-facing roof, and the fit would have reported one. Such
-  a source is now skipped with an explanation instead.
+  a source is now skipped with an explanation instead. Where the entity is
+  gone entirely — the inverter replaced, its integration removed, its
+  statistics still in the database — the statistic's own recorded unit
+  answers instead.
 
 ### Changed
 

@@ -22,12 +22,15 @@ from functools import partial
 from typing import Any
 
 from homeassistant.components.recorder import get_instance
-from homeassistant.components.recorder.statistics import statistics_during_period
+from homeassistant.components.recorder.statistics import (
+    get_metadata,
+    statistics_during_period,
+)
 from homeassistant.components.sensor import (
     DOMAIN as SENSOR_DOMAIN,
     SensorDeviceClass,
 )
-from homeassistant.const import ATTR_DEVICE_CLASS
+from homeassistant.const import ATTR_DEVICE_CLASS, UnitOfEnergy
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.storage import Store
@@ -284,10 +287,14 @@ class SolarForecastCoordinator(DataUpdateCoordinator[SolarForecast]):
             )
             return []
 
+        metadata = await get_instance(self.hass).async_add_executor_job(
+            partial(get_metadata, self.hass, statistic_ids=set(statistic_ids))
+        )
         sky = await self._async_history_sky(start, end)
         samples: list[PowerSample] = []
         for statistic_id in statistic_ids:
-            measures_energy = _measures_energy(self.hass, statistic_id)
+            _, described = metadata.get(statistic_id, (None, None))
+            measures_energy = _measures_energy(self.hass, statistic_id, described)
             hourly = _hourly_power(
                 rows.get(statistic_id, []), measures_energy=measures_energy
             )
@@ -414,22 +421,35 @@ def _hourly_power(
     return hours
 
 
-def _measures_energy(hass: HomeAssistant, entity_id: str) -> bool:
-    """Return True when an entity counts kilowatt-hours rather than watts.
+def _measures_energy(
+    hass: HomeAssistant, entity_id: str, metadata: Any | None = None
+) -> bool:
+    """Return True when a source counts kilowatt-hours rather than watts.
 
-    Asked of the entity registry as well as the state machine, because the
-    sensor worth learning from may belong to hardware that has since been
-    removed, and an entity with no state still remembers what it measured.
+    The entity is asked first, through the state machine and then the
+    registry, because only it distinguishes an energy counter that was
+    recorded as a plain measurement -- the case that matters, since such a
+    counter keeps a mean that reads convincingly as watts.
+
+    Statistics outlive the entity, though. Replace an inverter and its
+    integration goes with it, while years of its history stay in the
+    database, so where the entity is gone the statistic's own unit answers
+    instead.
     """
     if (state := hass.states.get(entity_id)) is not None and (
         declared := state.attributes.get(ATTR_DEVICE_CLASS)
     ):
         return bool(declared == SensorDeviceClass.ENERGY)
-    entry = er.async_get(hass).async_get(entity_id)
-    if entry is None:
+    if (entry := er.async_get(hass).async_get(entity_id)) is not None and (
+        device_class := entry.device_class or entry.original_device_class
+    ):
+        return bool(device_class == SensorDeviceClass.ENERGY)
+    if metadata is None:
         return False
-    device_class = entry.device_class or entry.original_device_class
-    return bool(device_class == SensorDeviceClass.ENERGY)
+    unit = metadata.get("unit_of_measurement")
+    if unit in {member.value for member in UnitOfEnergy}:
+        return True
+    return bool(metadata.get("has_sum"))
 
 
 def _same_place(model: SolarModel, hass: HomeAssistant) -> bool:

@@ -365,6 +365,12 @@ what tilt is read from.
   through two meters describe the same roof twice instead of once, and each is
   fitted its own planes before they are pooled.
 
+  History outlives the hardware that made it: replace an inverter and its
+  integration goes with it, taking the entity but leaving years of statistics
+  in the database. Those are still readable, identified by their own recorded
+  unit — but the entity picker can only offer entities that still exist, so
+  it is worth learning the roof **before** removing the old integration.
+
   Pick meters that watch **different** panels, though. Listing two string
   inverters *and* the meter that replaced them counts the same roof twice.
   Where they overlap in time the fit spots that and leaves the combined one
