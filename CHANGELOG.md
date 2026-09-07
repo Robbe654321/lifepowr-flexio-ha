@@ -15,6 +15,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- The README now explains why the Energy dashboard's forecast picker does not
+  list this integration, and how to set it anyway. The picker asks for config
+  entries of `integration_type: service`; this is a `device`, so it is
+  filtered out — while the back end happily accepts the forecast and draws it.
+  The dialog therefore misleads in both directions: it lists only cloud
+  forecast integrations, and shows nothing selected even when this one is.
+  Worse, saving that dialog writes back what the tickboxes say and quietly
+  removes the forecast, so that warning is now written down along with the
+  console snippet to set it and the call to verify it.
 - The energy platform no longer imports from the `energy` component at module
   scope. That made this file's importability depend on that component being
   loadable at the moment the integration starts, and a failed import does not

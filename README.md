@@ -466,15 +466,62 @@ comparison worth looking at.
 
 ### On the Energy dashboard
 
-Once a roof has been learned, Home Assistant will draw the forecast as the
-expected-production line behind your solar bars. Under **Settings → Dashboards
-→ Energy**, edit your solar production source and pick **LIFEPOWR FlexiO** as
-the forecast.
+Home Assistant draws a solar forecast as the expected-production line behind
+your solar bars, which is the one place a forecast gets checked against
+reality every day without anyone building a chart for it. This integration
+supplies one — but Home Assistant's own picker will not offer it, so it has to
+be set once by hand.
 
-If you already had another forecast integration selected there, **untick it**.
-Home Assistant hands the chart every selected forecast and they are drawn
-together, so leaving two on shows you roughly double. The forecast is then checked against reality every day, on the
-same chart, without anyone having to build one.
+**Why it is not in the list.** The Energy dashboard's forecast picker asks for
+config entries of `integration_type: service`. This integration is a
+`device` — it is a box on your network — so the picker filters it out. The
+back end has no such restriction: it accepts any integration that supplies a
+forecast, and this one does. Only the chooser cannot show it.
+
+The upshot is a dialog that lies to you in both directions. It will list only
+the cloud forecast integrations you have, and if this one is already selected
+it will show as though nothing is. Which leads to the trap:
+
+> **Do not press Save in that dialog once this is set.** The frontend writes
+> back whatever the tickboxes say, and they cannot represent this integration,
+> so saving silently removes the forecast. If you do, set it again with the
+> snippet below.
+
+**Setting it.** Once, in the browser console (F12):
+
+```js
+const hass = document.querySelector("home-assistant").hass;
+
+// Keep this line somewhere before going further.
+const prefs = await hass.callWS({ type: "energy/get_prefs" });
+console.log("BACKUP:", JSON.stringify(prefs));
+
+const [entry] = await hass.callApi(
+  "GET", "config/config_entries/entry?domain=lifepowr"
+);
+const energy_sources = prefs.energy_sources.map((source) =>
+  source.type === "solar"
+    ? { ...source, config_entry_solar_forecast: [entry.entry_id] }
+    : source
+);
+await hass.callWS({ type: "energy/save_prefs", energy_sources });
+```
+
+Then reload the page. This replaces the forecast list outright, so any other
+forecast integration comes off in the same move — which you want, since Home
+Assistant draws every selected forecast together and two of them show you
+roughly double.
+
+**Checking it.** This returns the hours the dashboard is actually being given:
+
+```js
+await document.querySelector("home-assistant").hass.callWS({
+  type: "energy/solar_forecast"
+})
+```
+
+An object keyed by the config entry id, with `wh_hours` inside it, means the
+chain is working end to end.
 
 ### Re-learning
 
