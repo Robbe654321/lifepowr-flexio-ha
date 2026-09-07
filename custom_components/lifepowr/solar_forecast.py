@@ -19,6 +19,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from functools import partial
+from itertools import pairwise
 from typing import Any
 
 from homeassistant.components.recorder import get_instance
@@ -106,10 +107,35 @@ class SolarForecast:
         return total
 
     def power_at(self, when: datetime) -> float | None:
-        """Return the average power forecast for the hour containing ``when``."""
-        for hour_start, power in self.hours:
-            if hour_start <= when < hour_start + timedelta(hours=1):
-                return power
+        """Return the power expected at one moment, W.
+
+        The forecast is a series of hourly means, and returning the mean of
+        whichever hour contains ``when`` would be defensible and look broken:
+        the value would sit perfectly still for an hour and then jump, which
+        reads as a sensor that has stopped updating.
+
+        A mean over an hour is, near enough, the instantaneous value at that
+        hour's midpoint, so the value between two midpoints is interpolated.
+        That both moves the way the sun does and is closer to the truth
+        mid-hour than either neighbour.
+        """
+        if not self.hours:
+            return None
+        middles = [
+            (start + timedelta(minutes=30), power) for start, power in self.hours
+        ]
+        if when < middles[0][0]:
+            # Inside the first hour but before its middle: nothing earlier to
+            # interpolate from, so the hour's own mean is the best available.
+            return middles[0][1] if when >= self.hours[0][0] else None
+        for (before, early), (after, late) in pairwise(middles):
+            if before <= when <= after:
+                span = (after - before).total_seconds()
+                if span <= 0.0:
+                    return early
+                return early + (late - early) * ((when - before).total_seconds() / span)
+        if when <= self.hours[-1][0] + timedelta(hours=1):
+            return middles[-1][1]
         return None
 
     def peak(self, start: datetime, end: datetime) -> tuple[datetime, float] | None:

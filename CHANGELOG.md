@@ -6,6 +6,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- The hourly series is published on `Solar forecast now` as the `forecast`
+  attribute, so it can be charted with a card of your own rather than only on
+  the Energy dashboard. The README has an apexcharts-card example and the
+  recorder exclusion to go with it.
+
+### Fixed
+
+- `Solar forecast now` no longer holds perfectly still for an hour and then
+  jumps. It was returning the mean of whichever hour contained the moment,
+  which is defensible and reads as a sensor that has stopped updating. An
+  hourly mean is near enough the instantaneous value at that hour's midpoint,
+  so the value between two midpoints is now interpolated: it follows the sun,
+  and mid-hour it is closer to the truth than either neighbour. The energy
+  totals still come from the hourly means and are unchanged.
+
 ### Changed
 
 - The diagnostic sensor and the README no longer present the learned planes as

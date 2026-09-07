@@ -184,17 +184,51 @@ def test_energy_clips_partial_hours() -> None:
     )
 
 
-def test_power_and_peak_read_the_right_hour() -> None:
-    """Both answer from the hour containing the moment asked about."""
+def test_the_power_now_follows_the_sun_instead_of_stepping() -> None:
+    """An hourly mean held flat for an hour reads as a stalled sensor.
+
+    A mean over an hour is near enough the instantaneous value at that hour's
+    midpoint, so between two midpoints the value is interpolated: it moves the
+    way the sun does, and mid-hour it is closer to the truth than either
+    neighbour.
+    """
     start = datetime(2024, 6, 21, 10, 0, tzinfo=UTC)
     forecast = SolarForecast(
         hours=((start, 2000.0), (start + timedelta(hours=1), 4000.0))
     )
-    assert forecast.power_at(start + timedelta(minutes=59)) == 2000.0
-    assert forecast.power_at(start + timedelta(hours=1)) == 4000.0
+    # Before the first midpoint there is nothing to interpolate from.
+    assert forecast.power_at(start) == 2000.0
+    assert forecast.power_at(start + timedelta(minutes=30)) == 2000.0
+    # Halfway between the two midpoints, halfway between the two means.
+    assert forecast.power_at(start + timedelta(hours=1)) == pytest.approx(3000.0)
+    assert forecast.power_at(start + timedelta(minutes=105)) == pytest.approx(4000.0)
+    # It rises strictly through the morning rather than sitting still.
+    walk = [forecast.power_at(start + timedelta(minutes=m)) for m in range(30, 95, 15)]
+    assert walk == sorted(walk)
+    assert len(set(walk)) > 1
+    assert forecast.power_at(start - timedelta(hours=1)) is None
     assert forecast.power_at(start + timedelta(days=1)) is None
-    peak = forecast.peak(start, start + timedelta(hours=2))
-    assert peak == (start + timedelta(hours=1), 4000.0)
+
+
+def test_the_energy_totals_still_come_from_the_hourly_means() -> None:
+    """Interpolating the instant must not disturb the integral."""
+    start = datetime(2024, 6, 21, 10, 0, tzinfo=UTC)
+    forecast = SolarForecast(
+        hours=((start, 2000.0), (start + timedelta(hours=1), 4000.0))
+    )
+    assert forecast.energy(start, start + timedelta(hours=2)) == pytest.approx(6.0)
+
+
+def test_peak_reads_the_right_hour() -> None:
+    """The peak is still a whole hour, since that is what was forecast."""
+    start = datetime(2024, 6, 21, 10, 0, tzinfo=UTC)
+    forecast = SolarForecast(
+        hours=((start, 2000.0), (start + timedelta(hours=1), 4000.0))
+    )
+    assert forecast.peak(start, start + timedelta(hours=2)) == (
+        start + timedelta(hours=1),
+        4000.0,
+    )
 
 
 def test_an_all_dark_window_has_no_peak() -> None:
@@ -560,3 +594,20 @@ async def test_a_live_entity_outranks_the_statistic_unit(hass) -> None:
     assert _measures_energy(
         hass, "sensor.daily_yield", {"unit_of_measurement": "W", "has_sum": False}
     )
+
+
+async def test_the_hourly_series_is_published_for_charting(hass, init_solar) -> None:
+    """A single state has a staircase for a history and says nothing about
+    the shape of the day, so the series a chart card needs is published too."""
+    state = hass.states.get("sensor.flexio_solar_forecast_now")
+    assert state is not None
+    series = state.attributes["forecast"]
+    assert len(series) > 12
+    for point in series:
+        assert datetime.fromisoformat(point["datetime"]).tzinfo is not None
+        assert point["power"] >= 0.0
+    # Chronological, so a chart does not have to sort it.
+    stamps = [point["datetime"] for point in series]
+    assert stamps == sorted(stamps)
+    # Only the one sensor carries it; the rest stay light.
+    assert "forecast" not in hass.states.get(TODAY_SENSOR).attributes

@@ -40,6 +40,8 @@ class FlexioSolarSensorEntityDescription(SensorEntityDescription):
     """Describe one thing the forecast can be asked."""
 
     value_fn: Callable[[SolarForecast], StateType | datetime]
+    #: Publish the whole hourly series alongside the state, for charting.
+    include_series: bool = False
 
 
 def build_descriptions(
@@ -61,6 +63,7 @@ def build_descriptions(
             native_unit_of_measurement=UnitOfPower.WATT,
             suggested_display_precision=0,
             value_fn=lambda forecast: forecast.power_at(dt_util.utcnow()),
+            include_series=True,
         ),
         FlexioSolarSensorEntityDescription(
             key="solar_forecast_today",
@@ -146,6 +149,27 @@ class FlexioSolarSensor(FlexioSolarEntity, SensorEntity):
         if self.coordinator.data is None:
             return None
         return self.entity_description.value_fn(self.coordinator.data)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Return the hourly series, on the one sensor worth charting.
+
+        A state is a single number, so its own history is a staircase and
+        tells you nothing about the shape of the day ahead. The series is what
+        a chart card needs: each entry is the average watts over the hour
+        beginning at ``datetime``.
+
+        It is a few hundred numbers rewritten every half hour, so it is worth
+        keeping out of the recorder -- see the README.
+        """
+        if not self.entity_description.include_series or self.coordinator.data is None:
+            return None
+        return {
+            "forecast": [
+                {"datetime": start.isoformat(), "power": round(watts, 1)}
+                for start, watts in self.coordinator.data.hours
+            ]
+        }
 
 
 class FlexioSolarModelSensor(FlexioSolarEntity, SensorEntity):

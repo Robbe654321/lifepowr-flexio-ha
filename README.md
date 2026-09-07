@@ -409,12 +409,71 @@ what tilt is read from.
   place. Two orientations less than about 60° apart usually cannot be told
   apart from a single meter, and are reported as the one plane that fits.
 
+### Seeing it as a curve
+
+`Solar forecast now` is a single number, so its own history is a staircase and
+tells you nothing about the shape of the day. There are two ways to see the
+curve.
+
+**The Energy dashboard**, which draws it behind your production bars — see
+below. Nothing to build.
+
+**Your own chart card**, from the hourly series published on
+`sensor.flexio_solar_forecast_now` as the `forecast` attribute. Each entry is
+the average watts over the hour beginning at its `datetime`. With
+[apexcharts-card](https://github.com/RomRider/apexcharts-card):
+
+```yaml
+type: custom:apexcharts-card
+graph_span: 2d
+span:
+  start: day
+now:
+  show: true
+series:
+  - entity: sensor.flexio_solar_forecast_now
+    name: Forecast
+    type: area
+    stroke_width: 2
+    data_generator: |
+      return entity.attributes.forecast.map(p => [
+        new Date(p.datetime).getTime(), p.power
+      ]);
+  - entity: sensor.flexio_solar_production
+    name: Actual
+    type: line
+    group_by:
+      func: avg
+      duration: 1h
+```
+
+That plots the forecast against what the panels are really doing, which is the
+comparison worth looking at.
+
+> The series is a few hundred numbers rewritten every half hour. Keep it out of
+> your database, or it will grow for no benefit:
+>
+> ```yaml
+> recorder:
+>   exclude:
+>     entity_globs:
+>       - sensor.flexio_solar_forecast_now
+> ```
+>
+> Excluding the entity keeps the *state* out of history as well. To keep the
+> state and drop only the attribute, leave the entity recorded and accept the
+> cost, or chart from the Energy dashboard instead.
+
 ### On the Energy dashboard
 
 Once a roof has been learned, Home Assistant will draw the forecast as the
 expected-production line behind your solar bars. Under **Settings → Dashboards
 → Energy**, edit your solar production source and pick **LIFEPOWR FlexiO** as
-the forecast. The forecast is then checked against reality every day, on the
+the forecast.
+
+If you already had another forecast integration selected there, **untick it**.
+Home Assistant hands the chart every selected forecast and they are drawn
+together, so leaving two on shows you roughly double. The forecast is then checked against reality every day, on the
 same chart, without anyone having to build one.
 
 ### Re-learning
