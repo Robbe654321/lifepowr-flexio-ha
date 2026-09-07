@@ -1201,6 +1201,18 @@ MIN_GAIN_HOUR: Final = 0.15
 #: Below this the rescaling is not worth mentioning in the log.
 GAIN_WORTH_SAYING: Final = 0.02
 
+#: Share of the bright hours dropped from each end before the totals are
+#: taken. The scale is fitted to energy rather than to the middle of the
+#: hourly ratios, because energy is what it is used to predict: a median
+#: counts a 2 kW hour and a 9 kW hour as one vote each, while the 9 kW hour is
+#: most of the day's kilowatt-hours -- and where the two disagree the median
+#: lands low, which keeps the forecast low at exactly the hours that matter.
+#: Trimming is what a median was there for: the tenth of hours with the
+#: highest ratio and the tenth with the lowest go first, so a cloud-edge hour
+#: that briefly beat the clear sky, or one with the inverter restarting,
+#: cannot move the total.
+GAIN_TRIM: Final = 0.1
+
 #: Fewer than this and the ratio is an anecdote.
 MIN_GAIN_HOURS: Final = 24
 
@@ -1222,9 +1234,12 @@ def calibrate(
     So the shape is kept and only the scale is refitted, from the ratio
     between what a meter reports and what the planes predict. That needs a few
     bright days rather than a season, which is exactly what is available after
-    a change. The median is taken, so a single freak hour cannot move it, and
-    the result is refused outright if it lands somewhere no rescaled roof
-    could be -- a ratio of five is a broken sensor, not a better inverter.
+    a change. It is fitted to energy -- the ratio of the totals over the
+    brightest hours, after the most and least favourable tenth of them are
+    dropped -- so no single freak hour can move it while the hours carrying
+    the kilowatt-hours still decide it. The result is refused outright if it
+    lands somewhere no rescaled roof could be: a ratio of five is a broken
+    sensor, not a better inverter.
     """
     if not model.arrays:
         return model
@@ -1251,24 +1266,25 @@ def calibrate(
         for array in model.arrays
     ]
     floor = model.peak_power * MIN_GAIN_HOUR
-    ratios: list[float] = []
+    hours: list[tuple[float, float, float]] = []
     for index, interval in enumerate(intervals):
         expected = sum(
             array.peak_power * column[index]
             for array, column in zip(model.arrays, columns, strict=True)
         )
         if expected >= floor and interval.sample.power > 0.0:
-            ratios.append(interval.sample.power / expected)
+            measured = interval.sample.power
+            hours.append((measured / expected, measured, expected))
 
-    if len(ratios) < MIN_GAIN_HOURS:
+    if len(hours) < MIN_GAIN_HOURS:
         LOGGER.debug(
             "Only %d bright hours with a measured sky to calibrate against; "
             "leaving the scale alone",
-            len(ratios),
+            len(hours),
         )
         return model
 
-    gain = _quantile(ratios, 0.5)
+    gain = _trimmed_ratio(hours)
     lowest, highest = GAIN_LIMITS
     if not lowest <= gain <= highest:
         LOGGER.warning(
@@ -1283,7 +1299,7 @@ def calibrate(
             "Rescaling the learned roof by %.2f against %d recent bright hours: "
             "the panels are the same, what is behind them delivers differently",
             gain,
-            len(ratios),
+            len(hours),
         )
     # The ceiling was read off the old hardware's own output, so it has to
     # travel with the scale. Left where it was it would clip the rescaled
@@ -1291,6 +1307,25 @@ def calibrate(
     # rescaling exists to fix.
     ceiling = None if model.ac_limit is None else model.ac_limit * gain / model.gain
     return replace(model, gain=gain, ac_limit=ceiling)
+
+
+def _trimmed_ratio(hours: Sequence[tuple[float, float, float]]) -> float:
+    """Return measured over expected across the middle of these hours.
+
+    Each hour arrives as ``(ratio, measured, expected)``. They are ordered by
+    ratio so the extremes can be dropped, and then it is the two *totals* that
+    are divided -- which is what makes this a fit to energy rather than an
+    average of ratios, and leaves the hours carrying the kilowatt-hours in
+    charge of the answer.
+    """
+    ordered = sorted(hours)
+    trim = int(len(ordered) * GAIN_TRIM)
+    kept = ordered[trim : len(ordered) - trim] if trim else ordered
+    measured = sum(hour[1] for hour in kept)
+    expected = sum(hour[2] for hour in kept)
+    if expected <= 0.0:
+        return 1.0
+    return measured / expected
 
 
 def _gather(

@@ -4,6 +4,26 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.2] — 2026-09-07
+
+### Fixed
+
+- The roof's gain is now fitted to **energy** rather than to the middle of the
+  hourly ratios. 0.3.1 took the median, which counts a 2 kW hour and a 9 kW
+  hour as one vote each — while the 9 kW hour is most of the day's
+  kilowatt-hours. Where the two disagree the median lands low and keeps the
+  forecast low at exactly the hours that matter: on the installation this was
+  developed against it returned 1.10 where the measured daily totals wanted
+  1.13 to 1.25.
+  It is now the ratio of the totals over the brightest hours, taken after the
+  most and least favourable tenth of them are dropped. The trimming is what
+  the median was there for — a cloud-edge hour that briefly beat the clear
+  sky, or one with the inverter restarting, still cannot move it — while the
+  hours carrying the kilowatt-hours decide the answer. On a synthetic roof
+  whose brightest hours deliver 30% more than the fit expects and whose
+  remaining hours deliver exactly what it expects, the median returns 1.00 and
+  this returns 1.20.
+
 ## [0.3.1] — 2026-09-07
 
 ### Added
@@ -270,7 +290,8 @@ The API also signs consumption negative. Grid power and household consumption
 are negated so they read positively in Home Assistant; battery flow keeps its
 raw sign, where positive already means discharging.
 
-[Unreleased]: https://github.com/Robbe654321/lifepowr-flexio-ha/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/Robbe654321/lifepowr-flexio-ha/compare/v0.3.2...HEAD
+[0.3.2]: https://github.com/Robbe654321/lifepowr-flexio-ha/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/Robbe654321/lifepowr-flexio-ha/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/Robbe654321/lifepowr-flexio-ha/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/Robbe654321/lifepowr-flexio-ha/compare/v0.2.0...v0.2.1
