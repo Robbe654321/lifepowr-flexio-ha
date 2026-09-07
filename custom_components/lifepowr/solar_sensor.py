@@ -40,6 +40,8 @@ class FlexioSolarSensorEntityDescription(SensorEntityDescription):
     """Describe one thing the forecast can be asked."""
 
     value_fn: Callable[[SolarForecast], StateType | datetime]
+    #: Publish the whole hourly series alongside the state, for charting.
+    include_series: bool = False
 
 
 def build_descriptions(
@@ -61,6 +63,7 @@ def build_descriptions(
             native_unit_of_measurement=UnitOfPower.WATT,
             suggested_display_precision=0,
             value_fn=lambda forecast: forecast.power_at(dt_util.utcnow()),
+            include_series=True,
         ),
         FlexioSolarSensorEntityDescription(
             key="solar_forecast_today",
@@ -147,14 +150,52 @@ class FlexioSolarSensor(FlexioSolarEntity, SensorEntity):
             return None
         return self.entity_description.value_fn(self.coordinator.data)
 
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Return the hourly series, on the one sensor worth charting.
+
+        A state is a single number, so its own history is a staircase and
+        tells you nothing about the shape of the day ahead. The series is what
+        a chart card needs: each entry is the average watts over the hour
+        beginning at ``datetime``.
+
+        It is a few hundred numbers rewritten every half hour, so it is worth
+        keeping out of the recorder -- see the README.
+        """
+        if not self.entity_description.include_series or self.coordinator.data is None:
+            return None
+        return {
+            "forecast": [
+                {"datetime": start.isoformat(), "power": round(watts, 1)}
+                for start, watts in self.coordinator.data.hours
+            ]
+        }
+
 
 class FlexioSolarModelSensor(FlexioSolarEntity, SensorEntity):
-    """The roof the integration believes it is looking at.
+    """What the integration fitted, and how well it fits.
 
-    Its state is the total learned capacity; the attributes are the planes it
-    was split into, and how well the whole thing reproduces days held out of
-    the fit. Where those numbers disagree with the roof, the disagreement is
-    the useful part: they were measured, not assumed.
+    The state is the capacity the roof is currently delivering, and that is
+    the number to trust: it is pinned by the brightest hours of the year and
+    can be checked against a reference like PVGIS. It is ``fitted_power``, the
+    capacity the planes were fitted to, times ``gain``, what that had to be
+    rescaled by to match the meter's recent output. A gain away from 1.0 means
+    the panels are the same but the hardware behind them has changed.
+
+    The planes in the attributes are a weaker claim, and worth reading for
+    what they are: **the effective plane of each measured source, not a survey
+    of the roof.** One inverter often carries panels from more than one roof
+    plane, and the single plane that best explains such a mixture is steeper
+    and turned further from south than anything actually up there. It forecasts
+    that source well -- better, measurably, than the true angles do, since it
+    also absorbs the shading -- while describing no real plane.
+
+    Two consequences. Panel counts must not be derived from how the capacity
+    splits between these planes; that assumes each plane is one orientation
+    with its own honest share of the losses, which a mixture is not. And a
+    shallow plane's bearing is barely observable at all: at 14 degrees of tilt
+    every bearing from east to west lands within 14% of due south, against 29%
+    at 45 degrees, so the fit can be confidently wrong about it.
     """
 
     @property
@@ -164,9 +205,9 @@ class FlexioSolarModelSensor(FlexioSolarEntity, SensorEntity):
 
     @property
     def native_value(self) -> StateType:
-        """Return the total learned capacity in watts."""
+        """Return the capacity the roof is currently delivering, in watts."""
         model = self.coordinator.model
-        return None if model is None else round(model.peak_power, 1)
+        return None if model is None else round(model.rated_power, 1)
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
@@ -180,10 +221,15 @@ class FlexioSolarModelSensor(FlexioSolarEntity, SensorEntity):
                     "orientation": array.orientation,
                     "tilt": round(array.tilt, 1),
                     "azimuth": round(array.azimuth, 1),
-                    "peak_power": round(array.peak_power, 1),
+                    "peak_power": round(array.peak_power * model.gain, 1),
                 }
                 for array in model.arrays
             ],
+            # What the fit's own capacity had to be multiplied by to match the
+            # meter's recent output. Away from 1.0 means the panels are the
+            # same but the hardware behind them changed.
+            "gain": round(model.gain, 3),
+            "fitted_power": round(model.peak_power, 1),
             "learned_at": model.created.isoformat(),
             "history_days": model.quality.days,
             "held_out_r2": round(model.quality.holdout_r2, 4),

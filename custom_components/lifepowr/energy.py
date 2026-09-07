@@ -18,8 +18,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from typing import TYPE_CHECKING
 
-from homeassistant.components.energy.types import SolarForecastType
 from homeassistant.components.sensor import (
     RestoreSensor,
     SensorDeviceClass,
@@ -34,6 +34,15 @@ from homeassistant.util import dt as dt_util
 from . import api
 from .coordinator import FlexioCoordinator
 from .entity import FlexioEntity
+
+if TYPE_CHECKING:
+    # Imported for typing only. Reaching into the energy component at module
+    # scope would make this file's importability depend on that component
+    # being loadable at the moment the integration starts, and if the import
+    # failed the platform would simply be skipped -- leaving the integration
+    # absent from the Energy dashboard's forecast list with nothing obviously
+    # broken to explain it.
+    from homeassistant.components.energy.types import SolarForecastType
 
 
 async def async_get_solar_forecast(

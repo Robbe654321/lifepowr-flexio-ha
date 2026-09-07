@@ -5,6 +5,9 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
+from homeassistant.components.energy.websocket_api import (
+    async_get_energy_platforms,
+)
 from homeassistant.const import CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ServiceValidationError
@@ -28,13 +31,14 @@ from custom_components.lifepowr.energy import async_get_solar_forecast
 from custom_components.lifepowr.openmeteo import ARCHIVE_URL, FORECAST_URL
 from custom_components.lifepowr.solar import Irradiance
 from custom_components.lifepowr.solar_forecast import (
+    CALIBRATION_DAYS,
     SolarForecast,
     _hourly_power,
     _measures_energy,
 )
 
 from .conftest import ENTRY_ID, HOST
-from .test_learning import LAT, LON, synthesise
+from .test_learning import LAT, LON, _mean_clear_sky, _roof, synthesise
 
 MODEL_SENSOR = "sensor.flexio_learned_solar_capacity"
 TODAY_SENSOR = "sensor.flexio_solar_forecast_today"
@@ -184,17 +188,51 @@ def test_energy_clips_partial_hours() -> None:
     )
 
 
-def test_power_and_peak_read_the_right_hour() -> None:
-    """Both answer from the hour containing the moment asked about."""
+def test_the_power_now_follows_the_sun_instead_of_stepping() -> None:
+    """An hourly mean held flat for an hour reads as a stalled sensor.
+
+    A mean over an hour is near enough the instantaneous value at that hour's
+    midpoint, so between two midpoints the value is interpolated: it moves the
+    way the sun does, and mid-hour it is closer to the truth than either
+    neighbour.
+    """
     start = datetime(2024, 6, 21, 10, 0, tzinfo=UTC)
     forecast = SolarForecast(
         hours=((start, 2000.0), (start + timedelta(hours=1), 4000.0))
     )
-    assert forecast.power_at(start + timedelta(minutes=59)) == 2000.0
-    assert forecast.power_at(start + timedelta(hours=1)) == 4000.0
+    # Before the first midpoint there is nothing to interpolate from.
+    assert forecast.power_at(start) == 2000.0
+    assert forecast.power_at(start + timedelta(minutes=30)) == 2000.0
+    # Halfway between the two midpoints, halfway between the two means.
+    assert forecast.power_at(start + timedelta(hours=1)) == pytest.approx(3000.0)
+    assert forecast.power_at(start + timedelta(minutes=105)) == pytest.approx(4000.0)
+    # It rises strictly through the morning rather than sitting still.
+    walk = [forecast.power_at(start + timedelta(minutes=m)) for m in range(30, 95, 15)]
+    assert walk == sorted(walk)
+    assert len(set(walk)) > 1
+    assert forecast.power_at(start - timedelta(hours=1)) is None
     assert forecast.power_at(start + timedelta(days=1)) is None
-    peak = forecast.peak(start, start + timedelta(hours=2))
-    assert peak == (start + timedelta(hours=1), 4000.0)
+
+
+def test_the_energy_totals_still_come_from_the_hourly_means() -> None:
+    """Interpolating the instant must not disturb the integral."""
+    start = datetime(2024, 6, 21, 10, 0, tzinfo=UTC)
+    forecast = SolarForecast(
+        hours=((start, 2000.0), (start + timedelta(hours=1), 4000.0))
+    )
+    assert forecast.energy(start, start + timedelta(hours=2)) == pytest.approx(6.0)
+
+
+def test_peak_reads_the_right_hour() -> None:
+    """The peak is still a whole hour, since that is what was forecast."""
+    start = datetime(2024, 6, 21, 10, 0, tzinfo=UTC)
+    forecast = SolarForecast(
+        hours=((start, 2000.0), (start + timedelta(hours=1), 4000.0))
+    )
+    assert forecast.peak(start, start + timedelta(hours=2)) == (
+        start + timedelta(hours=1),
+        4000.0,
+    )
 
 
 def test_an_all_dark_window_has_no_peak() -> None:
@@ -560,3 +598,242 @@ async def test_a_live_entity_outranks_the_statistic_unit(hass) -> None:
     assert _measures_energy(
         hass, "sensor.daily_yield", {"unit_of_measurement": "W", "has_sum": False}
     )
+
+
+async def test_the_hourly_series_is_published_for_charting(hass, init_solar) -> None:
+    """A single state has a staircase for a history and says nothing about
+    the shape of the day, so the series a chart card needs is published too."""
+    state = hass.states.get("sensor.flexio_solar_forecast_now")
+    assert state is not None
+    series = state.attributes["forecast"]
+    assert len(series) > 12
+    for point in series:
+        assert datetime.fromisoformat(point["datetime"]).tzinfo is not None
+        assert point["power"] >= 0.0
+    # Chronological, so a chart does not have to sort it.
+    stamps = [point["datetime"] for point in series]
+    assert stamps == sorted(stamps)
+    # Only the one sensor carries it; the rest stay light.
+    assert "forecast" not in hass.states.get(TODAY_SENSOR).attributes
+
+
+async def test_the_energy_dashboard_offers_us_as_a_forecast(hass, init_solar) -> None:
+    """The dashboard has to *find* the forecast before it can draw it.
+
+    Home Assistant loads each integration's `energy` platform and offers the
+    ones exposing async_get_solar_forecast. If that platform ever stops being
+    importable the integration silently disappears from the dashboard's
+    forecast list, with nothing else broken to explain it -- so the discovery
+    itself is asserted, both orderings, since the energy component is normally
+    up before a custom integration finishes loading.
+    """
+    assert await async_setup_component(hass, "energy", {})
+    await hass.async_block_till_done()
+    assert DOMAIN in await async_get_energy_platforms(hass)
+
+
+async def test_discovery_survives_energy_loading_first(
+    hass, solar_entry, with_recorder, mock_client, mock_history, aioclient_mock
+) -> None:
+    """Which is the order a real Home Assistant uses."""
+    aioclient_mock.get(FORECAST_URL, json=_forecast_payload(_hour_floor()))
+    aioclient_mock.get(ARCHIVE_URL, status=404)
+    assert await async_setup_component(hass, "energy", {})
+    await hass.async_block_till_done()
+    # The list is cached the first time anything asks, before we exist.
+    assert DOMAIN not in await async_get_energy_platforms(hass)
+
+    solar_entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(solar_entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert DOMAIN in await async_get_energy_platforms(hass)
+
+
+# --------------------------------------------------------------------------
+# A replaced inverter
+# --------------------------------------------------------------------------
+
+#: The roof the synthetic history was produced by, as in ``mock_history``.
+TRUE_ROOF = [(30.0, 100.0, 4000.0), (30.0, 260.0, 3000.0)]
+
+#: How much more the new hardware gets out of those same panels.
+INVERTER_GAIN = 1.25
+
+#: The statistic the geometry is learned from: a meter that has since been
+#: retired, so its history stops before the new inverter's begins.
+RETIRED = "sensor.sma_total_power"
+
+
+def _measured_sky(
+    first: datetime, days: int
+) -> tuple[dict, dict[datetime, Irradiance]]:
+    """Return an archive document and the skies it describes, hour by hour."""
+    times, ghi, dni, dhi, temperature = [], [], [], [], []
+    skies: dict[datetime, Irradiance] = {}
+    for index in range(days * 24):
+        begin = first + timedelta(hours=index)
+        # A day at a time, as cloud actually arrives. Without this the
+        # measured sky would equal the modelled one and the test could not
+        # tell the two paths apart.
+        clarity = 0.55 + 0.45 * ((index // 24) % 3) / 2
+        sky = _mean_clear_sky(begin, begin + timedelta(hours=1)).scaled(clarity)
+        times.append(int((begin + timedelta(hours=1)).timestamp()))
+        ghi.append(sky.ghi)
+        dni.append(sky.dni)
+        dhi.append(sky.dhi)
+        temperature.append(18.0)
+        skies[begin] = sky
+    return (
+        {
+            "hourly": {
+                "time": times,
+                "shortwave_radiation": ghi,
+                "direct_normal_irradiance": dni,
+                "diffuse_radiation": dhi,
+                "temperature_2m": temperature,
+            }
+        },
+        skies,
+    )
+
+
+@pytest.fixture
+def mock_replaced_inverter(aioclient_mock):
+    """Serve a retired meter's year plus the box's brighter recent fortnight.
+
+    Two statistics that never overlap in time, which is the situation after an
+    inverter swap: the geometry can only come from the old records, and only
+    the new ones say what the roof delivers today.
+    """
+    year = [
+        {"start": sample.start.timestamp(), "mean": sample.power}
+        for sample in synthesise(TRUE_ROOF)
+    ]
+    first = (FROZEN_NOW - timedelta(days=CALIBRATION_DAYS)).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+    payload, skies = _measured_sky(first, CALIBRATION_DAYS)
+    aioclient_mock.get(ARCHIVE_URL, json=payload)
+    roof = _roof(TRUE_ROOF)
+    recent = [
+        {
+            "start": begin.timestamp(),
+            "mean": roof.power(begin, begin + timedelta(hours=1), sky) * INVERTER_GAIN,
+        }
+        for begin, sky in skies.items()
+    ]
+
+    def _statistics(hass, start, end, statistic_ids, period, units, types):
+        if RETIRED in statistic_ids:
+            return {RETIRED: year}
+        return {next(iter(statistic_ids)): recent}
+
+    with (
+        patch(
+            "custom_components.lifepowr.solar_forecast.get_instance",
+            return_value=_Recorder(),
+        ),
+        patch(
+            "custom_components.lifepowr.solar_forecast.get_metadata",
+            return_value={},
+        ),
+        patch(
+            "custom_components.lifepowr.solar_forecast.statistics_during_period",
+            _statistics,
+        ),
+    ):
+        yield recent
+
+
+async def test_a_new_inverter_rescales_the_learned_roof(
+    hass,
+    solar_entry,
+    with_recorder,
+    mock_client,
+    mock_replaced_inverter,
+    aioclient_mock,
+) -> None:
+    """Geometry from the retired meter, scale from what the box reports now.
+
+    The panels have not moved, so the planes must come from the only history
+    long enough to place them. What is behind them has changed, and only the
+    last fortnight knows that -- so the shape is kept and the scale refitted.
+    """
+    aioclient_mock.get(FORECAST_URL, json=_forecast_payload(_hour_floor()))
+    solar_entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(
+        solar_entry, options={**solar_entry.options, CONF_SOLAR_SOURCE: [RETIRED]}
+    )
+    assert await hass.config_entries.async_setup(solar_entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    model = solar_entry.runtime_data.solar.model
+    assert model is not None
+    # The planes came out of the year, so they are the roof we synthesised.
+    assert model.peak_power == pytest.approx(7000.0, rel=0.2)
+    # And the scale came out of the fortnight, so it found the new hardware.
+    assert model.gain > 1.1
+    assert model.gain == pytest.approx(INVERTER_GAIN, rel=0.15)
+    assert model.rated_power == pytest.approx(7000.0 * INVERTER_GAIN, rel=0.25)
+
+    state = hass.states.get(MODEL_SENSOR)
+    assert state is not None
+    assert float(state.state) == pytest.approx(model.rated_power, abs=1.0)
+    assert state.attributes["gain"] == pytest.approx(model.gain, abs=0.001)
+    assert state.attributes["fitted_power"] == pytest.approx(model.peak_power, abs=1.0)
+    # The published planes still add up to what the sensor reports.
+    assert sum(array["peak_power"] for array in state.attributes["arrays"]) == (
+        pytest.approx(model.rated_power, abs=1.0)
+    )
+
+
+async def test_a_retired_meter_cannot_stop_the_rescaling(
+    hass,
+    solar_entry,
+    with_recorder,
+    mock_client,
+    mock_replaced_inverter,
+    aioclient_mock,
+) -> None:
+    """Losing the long history must not freeze the scale as well.
+
+    The records the geometry came from eventually fall out of the recorder's
+    window, and then no fit can run at all. The roof has not moved, so the
+    planes are still right -- but the hardware behind them can change again,
+    and the fortnight that would notice is still there.
+    """
+    aioclient_mock.get(FORECAST_URL, json=_forecast_payload(_hour_floor()))
+    solar_entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(
+        solar_entry, options={**solar_entry.options, CONF_SOLAR_SOURCE: [RETIRED]}
+    )
+    assert await hass.config_entries.async_setup(solar_entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    solar = solar_entry.runtime_data.solar
+    learned = solar.model
+    assert learned is not None
+
+    brighter = [
+        {"start": row["start"], "mean": row["mean"] * 1.2}
+        for row in mock_replaced_inverter
+    ]
+
+    def _statistics(hass, start, end, statistic_ids, period, units, types):
+        if RETIRED in statistic_ids:
+            return {}
+        return {next(iter(statistic_ids)): brighter}
+
+    with patch(
+        "custom_components.lifepowr.solar_forecast.statistics_during_period",
+        _statistics,
+    ):
+        assert await solar.async_learn() is not None
+
+    assert solar.model is not None
+    # The planes are exactly the ones that were fitted: nothing was relearned.
+    assert solar.model.arrays == learned.arrays
+    assert solar.model.created == learned.created
+    # The scale followed the meter.
+    assert solar.model.gain == pytest.approx(learned.gain * 1.2, rel=0.05)

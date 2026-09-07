@@ -4,7 +4,94 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.3.1] — 2026-09-07
+
+### Added
+
+- The learned roof now carries a **gain**: geometry and yield are fitted
+  separately, because they change on different clocks. Which way the panels
+  face takes a year of seasons to pin down and then never changes; how much
+  the hardware behind them delivers can change overnight, when an inverter is
+  replaced or a string is rewired. Previously a change like that could only be
+  corrected by relearning the geometry from a year of records the new hardware
+  has not produced yet — so the forecast stayed wrong for a year. Now the
+  shape is kept and only the scale is refitted, from the last three weeks of
+  the FlexiObox's own production against what the planes predict for the sky
+  that was actually measured over those hours. That takes a fortnight of
+  bright weather rather than a season.
+  - Only hours with a *measured* sky count. Against a modelled cloudless sky
+    the ratio is the clear-sky index, which is below one nearly always, and
+    calibrating on it would shrink a perfectly good roof by however cloudy the
+    fortnight happened to be.
+  - The median is taken over at least 24 bright hours, so one freak hour
+    cannot move it, and a ratio outside 0.4–2.5 is refused outright: that is a
+    sensor in the wrong unit or one that is not the panels at all, not a
+    better inverter.
+  - The learned AC ceiling travels with the scale. Read off the old hardware's
+    own output, left where it was it would clip the rescaled curve back to the
+    old inverter's midday plateau — exactly the hours the rescaling exists to
+    fix.
+  - `Learned solar capacity` now reports what the roof delivers today; the
+    `gain` and `fitted_power` attributes say what the fit itself came to. The
+    per-plane figures are scaled too, so they still add up to the state.
+  - When the records the geometry came from finally age out of the recorder,
+    no fit can run at all — and the roof still has not moved. The nightly job
+    now keeps the learned planes and rescales them, instead of leaving both
+    halves frozen.
+- The hourly series is published on `Solar forecast now` as the `forecast`
+  attribute, so it can be charted with a card of your own rather than only on
+  the Energy dashboard. The README has an apexcharts-card example and the
+  recorder exclusion to go with it.
+
+### Fixed
+
+- The README now explains why the Energy dashboard's forecast picker does not
+  list this integration, and how to set it anyway. The picker asks for config
+  entries of `integration_type: service`; this is a `device`, so it is
+  filtered out — while the back end happily accepts the forecast and draws it.
+  The dialog therefore misleads in both directions: it lists only cloud
+  forecast integrations, and shows nothing selected even when this one is.
+  Worse, saving that dialog writes back what the tickboxes say and quietly
+  removes the forecast, so that warning is now written down along with the
+  console snippet to set it and the call to verify it.
+- The energy platform no longer imports from the `energy` component at module
+  scope. That made this file's importability depend on that component being
+  loadable at the moment the integration starts, and a failed import does not
+  announce itself: the platform is simply skipped, and the integration is
+  absent from the Energy dashboard's forecast list with nothing else broken to
+  explain it. The type is now imported for typing only, and the discovery
+  itself is asserted in both load orders.
+- `Solar forecast now` no longer holds perfectly still for an hour and then
+  jumps. It was returning the mean of whichever hour contained the moment,
+  which is defensible and reads as a sensor that has stopped updating. An
+  hourly mean is near enough the instantaneous value at that hour's midpoint,
+  so the value between two midpoints is now interpolated: it follows the sun,
+  and mid-hour it is closer to the truth than either neighbour. The energy
+  totals still come from the hourly means and are unchanged.
+
+### Changed
+
+- The diagnostic sensor and the README no longer present the learned planes as
+  a survey of the roof. They are the effective plane of each measured *source*,
+  which is a weaker claim: one inverter often carries panels from more than one
+  roof plane, and the single plane that best explains such a mixture comes out
+  steeper and turned further from south than anything up there. Measured on a
+  real installation whose owner knew the answer, a fitted plane read 32° where
+  the roof is 14°, and forecast that inverter distinctly *better* than the true
+  angle did (held-out R² 0.76 against 0.57) because it also absorbs the
+  shading. On the site total the two were indistinguishable, 0.6636 against
+  0.6628.
+
+  So panel counts must not be derived from how the capacity splits between the
+  planes: that assumes each plane is one orientation carrying its own honest
+  share of the losses, which a mixture is not. The total capacity remains the
+  solid number — on that installation within a few percent of both PVGIS and
+  the measured energy.
+
+  Also noted: a shallow plane barely has a bearing to find. At 14° of tilt
+  every bearing from east to west lands within 14% of due south, against 29%
+  at 45°, so a confident bearing on a plane the fit believes is steep may be
+  neither.
 
 ## [0.3.0] — 2026-09-06
 
@@ -183,7 +270,8 @@ The API also signs consumption negative. Grid power and household consumption
 are negated so they read positively in Home Assistant; battery flow keeps its
 raw sign, where positive already means discharging.
 
-[Unreleased]: https://github.com/Robbe654321/lifepowr-flexio-ha/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/Robbe654321/lifepowr-flexio-ha/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/Robbe654321/lifepowr-flexio-ha/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/Robbe654321/lifepowr-flexio-ha/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/Robbe654321/lifepowr-flexio-ha/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/Robbe654321/lifepowr-flexio-ha/compare/v0.1.0...v0.2.0

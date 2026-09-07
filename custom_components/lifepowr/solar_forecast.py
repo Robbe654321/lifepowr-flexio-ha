@@ -19,6 +19,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from functools import partial
+from itertools import pairwise
 from typing import Any
 
 from homeassistant.components.recorder import get_instance
@@ -46,7 +47,7 @@ from .const import (
     SOLAR_STORE_KEY,
     SOLAR_STORE_VERSION,
 )
-from .learning import PowerSample, SolarModel, fit
+from .learning import PowerSample, SolarModel, calibrate, fit
 from .openmeteo import ARCHIVE_LAG, MAX_HISTORY_DAYS, OpenMeteoClient, OpenMeteoError
 from .parsing import KEY_PV_POWER
 
@@ -70,6 +71,11 @@ _KWH_PER_HOUR_IN_WATTS = 1000.0
 
 #: Below this the recorder has not yet seen enough of the year.
 MIN_HISTORY_HOURS = 200
+
+#: Days of the box's own output used to rescale a learned roof. Long enough to
+#: contain some bright hours, short enough to describe the hardware as it is
+#: now rather than as it was before an inverter was replaced.
+CALIBRATION_DAYS = 21
 
 #: How far Home Assistant may have moved before a stored model is thrown away.
 #: A tenth of this is a few kilometres, which changes nothing the sun does.
@@ -106,10 +112,35 @@ class SolarForecast:
         return total
 
     def power_at(self, when: datetime) -> float | None:
-        """Return the average power forecast for the hour containing ``when``."""
-        for hour_start, power in self.hours:
-            if hour_start <= when < hour_start + timedelta(hours=1):
-                return power
+        """Return the power expected at one moment, W.
+
+        The forecast is a series of hourly means, and returning the mean of
+        whichever hour contains ``when`` would be defensible and look broken:
+        the value would sit perfectly still for an hour and then jump, which
+        reads as a sensor that has stopped updating.
+
+        A mean over an hour is, near enough, the instantaneous value at that
+        hour's midpoint, so the value between two midpoints is interpolated.
+        That both moves the way the sun does and is closer to the truth
+        mid-hour than either neighbour.
+        """
+        if not self.hours:
+            return None
+        middles = [
+            (start + timedelta(minutes=30), power) for start, power in self.hours
+        ]
+        if when < middles[0][0]:
+            # Inside the first hour but before its middle: nothing earlier to
+            # interpolate from, so the hour's own mean is the best available.
+            return middles[0][1] if when >= self.hours[0][0] else None
+        for (before, early), (after, late) in pairwise(middles):
+            if before <= when <= after:
+                span = (after - before).total_seconds()
+                if span <= 0.0:
+                    return early
+                return early + (late - early) * ((when - before).total_seconds() / span)
+        if when <= self.hours[-1][0] + timedelta(hours=1):
+            return middles[-1][1]
         return None
 
     def peak(self, start: datetime, end: datetime) -> tuple[datetime, float] | None:
@@ -212,32 +243,37 @@ class SolarForecastCoordinator(DataUpdateCoordinator[SolarForecast]):
                 len(samples),
                 ", ".join(self.statistic_ids) or "the solar production sensor",
             )
-            return None
+            return await self._async_rescale()
 
         latitude = self.hass.config.latitude
         longitude = self.hass.config.longitude
+        altitude = float(self.hass.config.elevation or 0)
         model = await self.hass.async_add_executor_job(
-            partial(
-                fit,
-                samples,
-                latitude,
-                longitude,
-                float(self.hass.config.elevation or 0),
-            )
+            partial(fit, samples, latitude, longitude, altitude)
         )
         if model is None:
             LOGGER.warning("The solar history did not support a usable model")
-            return None
+            return await self._async_rescale()
+
+        # The geometry may have been learned from an older inverter's records,
+        # which is right for the roof and can be wrong about the yield: same
+        # panels, different electronics. Rescale against what the box itself
+        # has been reporting lately.
+        recent = await self._async_recent_output()
+        if recent:
+            model = await self.hass.async_add_executor_job(
+                partial(calibrate, model, recent)
+            )
 
         LOGGER.info(
             "Learned %d roof plane(s), %.2f kWp in total, from %d days "
             "(R² %.3f on days held out of the fit): %s",
             len(model.arrays),
-            model.peak_power / 1000,
+            model.rated_power / 1000,
             model.quality.days,
             model.quality.holdout_r2,
             ", ".join(
-                f"{array.orientation} {array.peak_power / 1000:.2f} kWp"
+                f"{array.orientation} {array.peak_power * model.gain / 1000:.2f} kWp"
                 for array in model.arrays
             ),
         )
@@ -263,9 +299,14 @@ class SolarForecastCoordinator(DataUpdateCoordinator[SolarForecast]):
                 "be worked out yet"
             )
             return []
+        return await self._async_samples(statistic_ids, self.history_days)
 
+    async def _async_samples(
+        self, statistic_ids: list[str], days: int
+    ) -> list[PowerSample]:
+        """Return the hourly power these statistics recorded over *days*."""
         end = dt_util.utcnow().replace(minute=0, second=0, microsecond=0)
-        start = end - timedelta(days=self.history_days)
+        start = end - timedelta(days=days)
         rows = await get_instance(self.hass).async_add_executor_job(
             partial(
                 statistics_during_period,
@@ -326,6 +367,45 @@ class SolarForecastCoordinator(DataUpdateCoordinator[SolarForecast]):
         )
         return samples
 
+    async def _async_rescale(self) -> SolarModel | None:
+        """Rescale the stored model when a fresh fit is not possible.
+
+        Geometry needs a long history, which can fall out of the recorder's
+        window when a production sensor is retired -- and then the roof, which
+        has not moved, cannot be refitted. The scale needs only a fortnight,
+        and it is the half that goes stale when the hardware changes. So a fit
+        that cannot run must not also stop the rescaling.
+        """
+        if self.model is None:
+            return None
+        recent = await self._async_recent_output()
+        if not recent:
+            return None
+        rescaled = await self.hass.async_add_executor_job(
+            partial(calibrate, self.model, recent)
+        )
+        if rescaled.gain == self.model.gain:
+            return None
+        LOGGER.info(
+            "Kept the learned roof and rescaled it to %.2f kWp against the "
+            "last %d days of production",
+            rescaled.rated_power / 1000,
+            CALIBRATION_DAYS,
+        )
+        self.model = rescaled
+        await self._store.async_save(rescaled.as_dict())
+        await self.async_request_refresh()
+        return rescaled
+
+    async def _async_recent_output(self) -> list[PowerSample]:
+        """Return the box's own recent production, for rescaling the roof."""
+        own = er.async_get(self.hass).async_get_entity_id(
+            SENSOR_DOMAIN, DOMAIN, f"{self.entry_id}_{KEY_PV_POWER}"
+        )
+        if own is None:
+            return []
+        return await self._async_samples([own], CALIBRATION_DAYS)
+
     async def _async_history_sky(
         self, start: datetime, end: datetime
     ) -> dict[datetime, Any]:
@@ -337,16 +417,22 @@ class SolarForecastCoordinator(DataUpdateCoordinator[SolarForecast]):
         if (last - first).days > MAX_HISTORY_DAYS:
             first = last - timedelta(days=MAX_HISTORY_DAYS)
         sky: dict[datetime, Any] = {}
-        try:
-            for hour in await self.client.async_history(first, last):
-                sky[hour.start] = hour
-        except OpenMeteoError as err:
-            LOGGER.info(
-                "No archived irradiance available (%s); "
-                "falling back on the cloudless-sky model",
-                err,
-            )
-            return {}
+        if last < first:
+            # A window shorter than the reanalysis lag has no archive to read
+            # at all -- the recalibration window is one such. The forecast
+            # endpoint's own past days cover the whole of it.
+            last = first - timedelta(days=1)
+        else:
+            try:
+                for hour in await self.client.async_history(first, last):
+                    sky[hour.start] = hour
+            except OpenMeteoError as err:
+                LOGGER.info(
+                    "No archived irradiance available (%s); "
+                    "falling back on the cloudless-sky model",
+                    err,
+                )
+                return {}
 
         # The archive stops a few days short of now. The forecast endpoint
         # keeps the recent past, so it covers the seam -- without which the

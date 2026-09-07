@@ -325,11 +325,28 @@ Nothing to enter.
   the panels east instead.
 - **The inverter's ceiling**, so a forecast never predicts more than the
   hardware can deliver.
+- **How much the hardware currently delivers**, refitted separately from the
+  geometry so that replacing an inverter does not cost you a year — see
+  [When the hardware changes](#when-the-hardware-changes).
 
 `sensor.flexio_learned_solar_capacity` is the diagnostic that shows the
-working: its state is the total learned capacity and its attributes list every
-plane, when the fit last ran, and how well it reproduces days that were held
-out of it.
+working: its state is what the roof delivers today and its attributes list
+every plane, the `gain` and the `fitted_power` it was applied to, when the fit
+last ran, and how well it reproduces days that were held out of it.
+
+**Read the planes for what they are: the effective plane of each measured
+source, not a survey of your roof.** One inverter often carries panels from
+more than one roof plane, and the single plane that best explains such a
+mixture comes out steeper and turned further from south than anything actually
+up there. It forecasts that source well — measurably better than the true
+angles do, because it absorbs the shading too — while describing no real
+plane. So do not work panel counts out from how the capacity splits between
+them: that assumes each plane is one orientation carrying its own honest share
+of the losses, which a mixture is not.
+
+The total is the solid number. On the installation this was developed against
+it came out within a few percent of what PVGIS and the measured energy both
+say, while the per-plane tilt was out by nearly twenty degrees on one plane.
 
 > **A learned capacity reads lower than the number on your panels, and should.**
 > It is *delivered AC power at 1000 W/m² on the panels themselves* — inverter
@@ -338,6 +355,41 @@ out of it.
 > lands near 9 kW. That gap is not an error in the fit; it is the difference
 > between a label and a roof, and it is the reason a forecast built on the
 > label runs high.
+
+### When the hardware changes
+
+Geometry and yield move on different clocks. Which way the panels face takes a
+year of seasons to establish and then never changes. How much the hardware
+behind them delivers can change overnight — a new inverter, a rewired string —
+and a model that has to relearn its geometry before it can notice is a model
+that is wrong until a full year of new records exists.
+
+So the two are fitted separately. The planes come from the long history; the
+scale is refitted every night from the last three weeks of the FlexiObox's own
+production, as the ratio between what it reported and what the planes predict
+for the sky that was actually measured over those hours. A fortnight of decent
+weather is enough. The result appears as the `gain` attribute, and 1.0 means
+the fit and the meter agree.
+
+Three things keep it from doing harm:
+
+- Only hours with a **measured** sky count. Against a modelled cloudless sky
+  the ratio would be the clear-sky index, below one nearly always, and would
+  shrink a perfectly good roof by however cloudy the fortnight was.
+- The **median** over at least 24 bright hours, so a single freak hour cannot
+  move it.
+- A ratio **outside 0.4–2.5 is refused**. That is a sensor in the wrong unit,
+  or one that is not the panels at all — not a better inverter.
+
+The learned AC ceiling is scaled along with it, since it was read off the old
+hardware's own output and would otherwise clip the corrected curve back to the
+old inverter's midday plateau.
+
+This also covers the far end of the same problem. If the sensor the geometry
+was learned from is retired, its records eventually fall out of the recorder's
+window and no fit can run at all — while the roof, of course, has not moved.
+The nightly job then keeps the learned planes and rescales them, rather than
+freezing both halves.
 
 ### Where the numbers come from
 
@@ -380,9 +432,13 @@ what tilt is read from.
   less and say so through a lower held-out score. A brand-new installation has
   nothing to learn from yet; it will start on its own once the recorder has
   enough.
-- **Bearing is firmer than tilt.** Bearing follows from the time of day
-  production peaks, which is unambiguous. Tilt is entangled with how hazy the
-  sky is assumed to be, and the two can trade against each other.
+- **Bearing is firmer than tilt, but only on a steep plane.** Bearing follows
+  from the time of day production peaks. Tilt is entangled with how hazy the
+  sky is assumed to be, and the two trade against each other. Worse, the two
+  weaknesses compound: a shallow plane barely has a bearing to find, since at
+  14° of tilt every bearing from east to west lands within 14% of due south,
+  against 29% at 45°. A confident bearing on a plane the fit thinks is steep
+  may be neither.
 - **Several inverters are better than one.** The same roof read through two
   meters is a strictly richer measurement than their sum, and is fitted
   separately before the planes are pooled.
@@ -391,13 +447,119 @@ what tilt is read from.
   place. Two orientations less than about 60° apart usually cannot be told
   apart from a single meter, and are reported as the one plane that fits.
 
+### Seeing it as a curve
+
+`Solar forecast now` is a single number, so its own history is a staircase and
+tells you nothing about the shape of the day. There are two ways to see the
+curve.
+
+**The Energy dashboard**, which draws it behind your production bars — see
+below. Nothing to build.
+
+**Your own chart card**, from the hourly series published on
+`sensor.flexio_solar_forecast_now` as the `forecast` attribute. Each entry is
+the average watts over the hour beginning at its `datetime`. With
+[apexcharts-card](https://github.com/RomRider/apexcharts-card):
+
+```yaml
+type: custom:apexcharts-card
+graph_span: 2d
+span:
+  start: day
+now:
+  show: true
+series:
+  - entity: sensor.flexio_solar_forecast_now
+    name: Forecast
+    type: area
+    stroke_width: 2
+    data_generator: |
+      return entity.attributes.forecast.map(p => [
+        new Date(p.datetime).getTime(), p.power
+      ]);
+  - entity: sensor.flexio_solar_production
+    name: Actual
+    type: line
+    group_by:
+      func: avg
+      duration: 1h
+```
+
+That plots the forecast against what the panels are really doing, which is the
+comparison worth looking at.
+
+> The series is a few hundred numbers rewritten every half hour. Keep it out of
+> your database, or it will grow for no benefit:
+>
+> ```yaml
+> recorder:
+>   exclude:
+>     entity_globs:
+>       - sensor.flexio_solar_forecast_now
+> ```
+>
+> Excluding the entity keeps the *state* out of history as well. To keep the
+> state and drop only the attribute, leave the entity recorded and accept the
+> cost, or chart from the Energy dashboard instead.
+
 ### On the Energy dashboard
 
-Once a roof has been learned, Home Assistant will draw the forecast as the
-expected-production line behind your solar bars. Under **Settings → Dashboards
-→ Energy**, edit your solar production source and pick **LIFEPOWR FlexiO** as
-the forecast. The forecast is then checked against reality every day, on the
-same chart, without anyone having to build one.
+Home Assistant draws a solar forecast as the expected-production line behind
+your solar bars, which is the one place a forecast gets checked against
+reality every day without anyone building a chart for it. This integration
+supplies one — but Home Assistant's own picker will not offer it, so it has to
+be set once by hand.
+
+**Why it is not in the list.** The Energy dashboard's forecast picker asks for
+config entries of `integration_type: service`. This integration is a
+`device` — it is a box on your network — so the picker filters it out. The
+back end has no such restriction: it accepts any integration that supplies a
+forecast, and this one does. Only the chooser cannot show it.
+
+The upshot is a dialog that lies to you in both directions. It will list only
+the cloud forecast integrations you have, and if this one is already selected
+it will show as though nothing is. Which leads to the trap:
+
+> **Do not press Save in that dialog once this is set.** The frontend writes
+> back whatever the tickboxes say, and they cannot represent this integration,
+> so saving silently removes the forecast. If you do, set it again with the
+> snippet below.
+
+**Setting it.** Once, in the browser console (F12):
+
+```js
+const hass = document.querySelector("home-assistant").hass;
+
+// Keep this line somewhere before going further.
+const prefs = await hass.callWS({ type: "energy/get_prefs" });
+console.log("BACKUP:", JSON.stringify(prefs));
+
+const [entry] = await hass.callApi(
+  "GET", "config/config_entries/entry?domain=lifepowr"
+);
+const energy_sources = prefs.energy_sources.map((source) =>
+  source.type === "solar"
+    ? { ...source, config_entry_solar_forecast: [entry.entry_id] }
+    : source
+);
+await hass.callWS({ type: "energy/save_prefs", energy_sources });
+```
+
+Then reload the page. This replaces the forecast list outright, so any other
+forecast integration comes off in the same move — which you want, since Home
+Assistant draws every selected forecast together and two of them show you
+roughly double.
+
+**Checking it.** This returns the hours the dashboard is actually being given:
+
+```js
+await document.querySelector("home-assistant").hass.callWS({
+  type: "energy/solar_forecast"
+})
+```
+
+An object keyed by the config entry id, with `wh_hours` inside it, means the
+chain is working end to end.
 
 ### Re-learning
 
